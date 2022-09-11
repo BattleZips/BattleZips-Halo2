@@ -1,200 +1,107 @@
-use crate::board::board_table::BoardTable;
+// use crate::board::board_table::BoardTable;
 use halo2_proofs::{arithmetic::FieldExt, circuit::*, plonk::*, poly::Rotation};
+use std::marker::PhantomData;
+use crate::board::utils::SHIP_LENGTHS;
 
 #[derive(Debug, Clone)]
-struct BoardConfig<F: FieldExt> {
-    length: Column<Fixed>,
-    x: Column<Advice>,
-    y: Column<Advice>,
-    z: Column<Advice>,
-    q_range: Selector,
-    q_placement: Selector,
-    table: BoardTable<F>,
+pub(super) struct BoardConfig<F> {
+    pub ship_length: Column<Fixed>,
+    pub x: Column<Advice>,
+    pub y: Column<Advice>,
+    pub z: Column<Advice>,
+    pub q_range: Selector,
+    pub _marker: PhantomData<F>,
 }
 
 impl<F: FieldExt> BoardConfig<F> {
-    fn configure(meta: &mut ConstraintSystem<F>, value: Column<Advice>) -> Self {
-        // configure public columns
-        let length = meta.fixed_column();
-        // configure advice columns
-        let x = meta.advice_column();
-        let y = meta.advice_column();
-        let z = meta.advice_column();
-
-        // Toggle ship placement range constraint
-        let q_range = meta.selector();
-        // Toggle board coordinate lookup
-        let q_placement = meta.complex_selector();
-
-        // Configure a lookup table
-        let table = BoardTable::configure(meta);
-
-        let config = Self {
-            x,
-            y,
-            z,
-            q_range,
-            q_placement,
-            table: table.clone(),
-        };
-
+    /**
+     * TBH IDK WHAT EXACTLY CONFIGURE IS COMPARED TO SYNTH
+     */
+    pub(super) fn configure(meta: &mut ConstraintSystem<F>, config: BoardConfig<F>) -> Self {
         // Ship input range check gate
         meta.create_gate("ship range check", |meta| {
             // witness state
-            let q_range = meta.query_selector(q_range);
-            let length = meta.query_fixed(length, Rotation::cur());
-            let x = meta.query_advice(x, Rotation::cur());
-            let y = meta.query_advice(y, Rotation::cur());
-            let z = meta.query_advice(z, Rotation::cur());
+            let q_range = meta.query_selector(config.q_range);
+            let ship_length = meta.query_fixed(config.ship_length, Rotation::cur());
+            let x = meta.query_advice(config.x, Rotation::cur());
+            let y = meta.query_advice(config.y, Rotation::cur());
+            let z = meta.query_advice(config.z, Rotation::cur());
 
             // define binary check (z ∈ [0, 1])
-            let binary_check = |z: Expression<F>| z * (z - Expression::Constant(F::from(1u64)));
+            let binary_check = |val: Expression<F>| {
+                val.clone() * (val.clone() - Expression::Constant(F::one()))
+            };
 
-            // define ship range check (x, y ∈ [0, 9] (plus ship length))
-            let range_check = |ship: [Expression<F>; 3], length: Expression<F>| {
-                let value = Expression::Constant(F::from(10))
-                    * (x + length * (Expression::Constant(F::one()) - ship[2]))
-                    + ship[1]
-                    + length * ship[2];
-                (0..=9).fold(value.clone(), |expression, i| {
-                    expression * (Expression::Constant(F::from(i as u64)) - value.clone())
+            // define ship range check (x, y ∈ [0, 9])
+            let decimal_check = |val: Expression<F>| {
+                (0..=9).fold(val.clone(), |expression, i| {
+                    expression * (Expression::Constant(F::from(i as u64)) - val.clone())
                 })
             };
-            Constraints::with_selector(q_range, [
-                ("z range check", binary_check(z)),
-                ("x/y range check", range_check([x, y, z], length))
-            ])
+
+            // define ship length extension check
+            let length_check =
+                |x: Expression<F>, y: Expression<F>, z: Expression<F>, length: Expression<F>| {
+                    let one = Expression::Constant(F::one());
+                    // get range of extension for X if Z = 0 and Y if Z = 1 given ship length
+                    let x_extension = (one.clone() - z.clone()) * (x.clone() + length.clone() - one.clone());
+                    let y_extension = z.clone() * (y.clone() - length.clone() + one.clone());
+                    let value = x_extension + y_extension;
+                    decimal_check(value)
+                };
+
+            /// let value = Expression::Constant(F::from(10))
+            // * (x.clone() + ship_length.clone() * (Expression::Constant(F::one()) - ship[2].clone()))
+            // + ship[1].clone()
+            // + ship_length.clone() * ship[2].clone();
+            Constraints::with_selector(
+                q_range,
+                [
+                    ("x decimal range check", decimal_check(x.clone())),
+                    ("y decimal range check", decimal_check(y.clone())),
+                    ("z binary range check", binary_check(z.clone())),
+                    ("ship length range check", length_check(x.clone(), y.clone(), z.clone(), ship_length.clone()))
+                ],
+            )
         });
 
-        // Board coordinate lookup gate
-        //
-        meta.lookup(|meta| {
-            let q_lookup = meta.query_selector(q_lookup);
-            let value = meta.query_advice(value, Rotation::cur());
-            vec![(q_lookup * value, table.value)]
-        });
+        // // Board coordinate lookup gate
+        // //
+        // meta.lookup(|meta| {
+        //     let q_lookup = meta.query_selector(q_lookup);
+        //     let value = meta.query_advice(value, Rotation::cur());
+        //     vec![(q_lookup * value, table.value)]
+        // });
 
         config
     }
 
-    fn assign(
+    pub(super) fn assign_ships(
         &self,
         mut layouter: impl Layouter<F>,
-        value: Value<Assigned<F>>,
-        range: usize,
+        ships: [[Value<F>; 3]; 5],
     ) -> Result<(), Error> {
-        assert!(range <= LOOKUP_RANGE);
-        if range < RANGE {
-            layouter.assign_region(
-                || "Assign value",
-                |mut region| {
-                    let offset = 0;
-                    // Enable q_range_check
-                    self.q_range_check.enable(&mut region, offset);
+        layouter.assign_region(
+            || "Assign ships to advice cells",
+            |mut region| {
+                for offset in 0..ships.len() {
+                    // enable range and lookup selectors
+                    self.q_range.enable(&mut region, offset);
 
-                    // Assign given value
-                    region.assign_advice(|| "assign value", self.value, offset, || value)?;
-                    Ok(())
-                },
-            )
-        } else {
-            layouter.assign_region(
-                || "Assign value for lookup range check",
-                |mut region| {
-                    let offset = 0;
-                    // Enable q_lookup
-                    self.q_lookup.enable(&mut region, offset);
-
-                    // Assign given value
-                    region.assign_advice(|| "assign value", self.value, offset, || value)?;
-                    Ok(())
-                },
-            )
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use {
-        super::*,
-        halo2_proofs::{
-            circuit::floor_planner::V1,
-            dev::{FailureLocation, MockProver, VerifyFailure},
-            pasta::Fp,
-            plonk::{Any, Circuit},
-        },
-    };
-
-    #[derive(Default)]
-    struct MyCircuit<F: FieldExt, const RANGE: usize, const LOOKUP_RANGE: usize> {
-        value: Value<Assigned<F>>,
-        large_value: Value<Assigned<F>>,
-    }
-
-    impl<F: FieldExt, const RANGE: usize, const LOOKUP_RANGE: usize> Circuit<F>
-        for MyCircuit<F, RANGE, LOOKUP_RANGE>
-    {
-        type Config = RangeCheckConfig<F, RANGE, LOOKUP_RANGE>;
-        type FloorPlanner = V1;
-
-        fn without_witnesses(&self) -> Self {
-            Self::default()
-        }
-
-        fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-            let value = meta.advice_column();
-            RangeCheckConfig::configure(meta, value)
-        }
-
-        fn synthesize(
-            &self,
-            config: Self::Config,
-            mut layouter: impl Layouter<F>,
-        ) -> Result<(), Error> {
-            config.table.load(&mut layouter)?;
-            config.assign(layouter.namespace(|| "Assign value"), self.value, RANGE)?;
-            config.assign(
-                layouter.namespace(|| "Assign large value"),
-                self.value,
-                LOOKUP_RANGE,
-            )?;
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn test_range_check() {
-        let k = 9;
-        const RANGE: usize = 8;
-        const LOOKUP_RANGE: usize = 256;
-
-        // Successful cases
-        for i in 0..RANGE {
-            let circuit = MyCircuit::<Fp, RANGE, LOOKUP_RANGE> {
-                value: Value::known(Fp::from(i as u64).into()),
-                large_value: Value::known(Fp::from(i as u64).into()),
-            };
-
-            let prover = MockProver::run(k, &circuit, vec![]).unwrap();
-            prover.assert_satisfied();
-        }
-
-        // // Unsuccessful case v = 8
-        // let circuit = MyCircuit::<Fp, RANGE> {
-        //     value: Value::known(Fp::from(RANGE as u64).into()),
-        // };
-        // let prover = MockProver::run(k, &circuit, vec![]).unwrap();
-        // assert_eq!(
-        //     prover.verify(),
-        //     Err(vec![VerifyFailure::ConstraintNotSatisfied {
-        //         constraint: ((0, "Range check").into(), 0, "range check").into(),
-        //         location: FailureLocation::InRegion {
-        //             region: (0, "Assign value").into(),
-        //             offset: 0
-        //         },
-        //         cell_values: vec![(((Any::Advice, 0).into(), 0).into(), "0x8".to_string())]
-        //     }])
-        // )
+                    // Assign x, y, z, length
+                    let ship = ships[offset];
+                    region.assign_advice(|| "assign x", self.x, offset, || ship[0]);
+                    region.assign_advice(|| "assign y", self.y, offset, || ship[1]);
+                    region.assign_advice(|| "assign z", self.z, offset, || ship[2]);
+                    region.assign_fixed(
+                        || "assign ship_length",
+                        self.ship_length,
+                        offset,
+                        || Value::known(F::from(SHIP_LENGTHS[offset] as u64)),
+                    );
+                }
+                Ok(())
+            },
+        )
     }
 }
