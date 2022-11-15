@@ -1,10 +1,11 @@
 // use crate::board::board_table::BoardTable;
+use crate::board::utils::SHIP_LENGTHS;
 use halo2_proofs::{arithmetic::FieldExt, circuit::*, plonk::*, poly::Rotation};
 use std::marker::PhantomData;
-use crate::board::utils::SHIP_LENGTHS;
 
 #[derive(Debug, Clone)]
-pub(super) struct BoardConfig<F> {
+pub struct BoardConfig<F> {
+    // Description of the witness (input, trace, output) needed to prove a board configuration
     pub ship_length: Column<Fixed>,
     pub x: Column<Advice>,
     pub y: Column<Advice>,
@@ -13,6 +14,7 @@ pub(super) struct BoardConfig<F> {
     pub _marker: PhantomData<F>,
 }
 
+// Implementation of the instruction set used to facilitate the board integrity proof
 impl<F: FieldExt> BoardConfig<F> {
     /**
      * TBH IDK WHAT EXACTLY CONFIGURE IS COMPARED TO SYNTH
@@ -28,9 +30,8 @@ impl<F: FieldExt> BoardConfig<F> {
             let z = meta.query_advice(config.z, Rotation::cur());
 
             // define binary check (z ∈ [0, 1])
-            let binary_check = |val: Expression<F>| {
-                val.clone() * (val.clone() - Expression::Constant(F::one()))
-            };
+            let binary_check =
+                |val: Expression<F>| val.clone() * (val.clone() - Expression::Constant(F::one()));
 
             // define ship range check (x, y ∈ [0, 9])
             let decimal_check = |val: Expression<F>| {
@@ -44,13 +45,14 @@ impl<F: FieldExt> BoardConfig<F> {
                 |x: Expression<F>, y: Expression<F>, z: Expression<F>, length: Expression<F>| {
                     let one = Expression::Constant(F::one());
                     // get range of extension for X if Z = 0 and Y if Z = 1 given ship length
-                    let x_extension = (one.clone() - z.clone()) * (x.clone() + length.clone() - one.clone());
+                    let x_extension =
+                        (one.clone() - z.clone()) * (x.clone() + length.clone() - one.clone());
                     let y_extension = z.clone() * (y.clone() - length.clone() + one.clone());
                     let value = x_extension + y_extension;
                     decimal_check(value)
                 };
 
-            /// let value = Expression::Constant(F::from(10))
+            // let value = Expression::Constant(F::from(10))
             // * (x.clone() + ship_length.clone() * (Expression::Constant(F::one()) - ship[2].clone()))
             // + ship[1].clone()
             // + ship_length.clone() * ship[2].clone();
@@ -60,7 +62,10 @@ impl<F: FieldExt> BoardConfig<F> {
                     ("x decimal range check", decimal_check(x.clone())),
                     ("y decimal range check", decimal_check(y.clone())),
                     ("z binary range check", binary_check(z.clone())),
-                    ("ship length range check", length_check(x.clone(), y.clone(), z.clone(), ship_length.clone()))
+                    (
+                        "ship length range check",
+                        length_check(x.clone(), y.clone(), z.clone(), ship_length.clone()),
+                    ),
                 ],
             )
         });

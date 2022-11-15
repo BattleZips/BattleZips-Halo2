@@ -3,7 +3,7 @@ use halo2_proofs::{arithmetic::FieldExt, circuit::*, plonk::*};
 use std::marker::PhantomData;
 
 #[derive(Default)]
-pub(super) struct BoardCircuit<F: FieldExt> {
+pub struct BoardCircuit<F: FieldExt> {
     ships: [[Value<F>; 3]; 5],
 }
 
@@ -52,29 +52,12 @@ mod tests {
     use super::*;
     use crate::board::{
         board_circuit::BoardCircuit,
-        utils::{INVALID_SHIPS, VALID_SHIPS},
+        utils::{ships_as_values, INVALID_SHIPS, VALID_SHIPS},
     };
     use halo2_proofs::{
-        circuit::Value,
         dev::{FailureLocation, MockProver, VerifyFailure},
         pasta::Fp,
     };
-
-    /**
-     * Wrap ship tuples in Value::known
-     */
-    fn ship_to_values(ships: &[[u64; 3]; 5]) -> [[Value<Fp>; 3]; 5] {
-        let empty = Value::known(Fp::zero());
-        let empty_ship = [empty, empty, empty];
-        let mut _ships: [[Value<Fp>; 3]; 5] =
-            [empty_ship, empty_ship, empty_ship, empty_ship, empty_ship];
-        for i in 0..ships.len() {
-            for j in 0..ships[i].len() {
-                _ships[i][j] = Value::known(Fp::from(ships[i][j]));
-            }
-        }
-        _ships
-    }
 
     #[test]
     fn test_board_circuit() {
@@ -84,7 +67,7 @@ mod tests {
         // Successful cases
         for board in VALID_SHIPS {
             let circuit = BoardCircuit::<Fp> {
-                ships: ship_to_values(&board),
+                ships: ships_as_values(&board),
             };
             let prover = MockProver::run(k, &circuit, vec![]).unwrap();
             prover.assert_satisfied();
@@ -93,7 +76,7 @@ mod tests {
 
         // ship[1]: x range out of bounds (¬x∈[0, 9])
         let circuit = BoardCircuit::<Fp> {
-            ships: ship_to_values(&INVALID_SHIPS[3]),
+            ships: ships_as_values(&INVALID_SHIPS[3]),
         };
         let prover = MockProver::run(k, &circuit, vec![]).unwrap();
         assert_eq!(
@@ -110,7 +93,7 @@ mod tests {
 
         // ship[1]: y range out of bounds (¬x∈[0, 9])
         let circuit = BoardCircuit::<Fp> {
-            ships: ship_to_values(&INVALID_SHIPS[4]),
+            ships: ships_as_values(&INVALID_SHIPS[4]),
         };
         let prover = MockProver::run(k, &circuit, vec![]).unwrap();
         assert_eq!(
@@ -127,7 +110,7 @@ mod tests {
 
         // ship[1]: z range out of bounds (¬x∈[0, 1])
         let circuit = BoardCircuit::<Fp> {
-            ships: ship_to_values(&INVALID_SHIPS[5]),
+            ships: ships_as_values(&INVALID_SHIPS[5]),
         };
         let prover = MockProver::run(k, &circuit, vec![]).unwrap();
         assert_eq!(
@@ -158,10 +141,10 @@ mod tests {
                 }
             ])
         );
-        
+
         // ship[1] fails as z not toggled (ship is horizontal off board)
         let circuit = BoardCircuit::<Fp> {
-            ships: ship_to_values(&INVALID_SHIPS[1]),
+            ships: ships_as_values(&INVALID_SHIPS[1]),
         };
         let prover = MockProver::run(k, &circuit, vec![]).unwrap();
         assert_eq!(
@@ -183,7 +166,7 @@ mod tests {
 
         // ship 5 fails as z toggled (ship is vertical off board)
         let circuit = BoardCircuit::<Fp> {
-            ships: ship_to_values(&INVALID_SHIPS[2]),
+            ships: ships_as_values(&INVALID_SHIPS[2]),
         };
         let prover = MockProver::run(k, &circuit, vec![]).unwrap();
         assert_eq!(
@@ -203,4 +186,34 @@ mod tests {
             }])
         );
     }
+
+    // #[cfg(feature = "dev-graph")]
+    // #[test]
+    // fn print_board_circuit() -> Result<(), Error> {
+    //     // Prepare the circuit you want to render.
+    //     // You don't need to include any witness variables.
+    //     let ships: [[u64; 3]; 5] = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    //     let circuit: BoardCircuit<Fp> = BoardCircuit {
+    //         ships: ships_as_values(&ships),
+    //     };
+
+    //     // Create the area you want to draw on.
+    //     // Use SVGBackend if you want to render to .svg instead.
+    //     use plotters::prelude::*;
+    //     let root = BitMapBackend::new("layout.svg", (1024, 768)).into_drawing_area();
+    //     root.fill(&WHITE).unwrap();
+    //     let root = root
+    //         .titled("Example Circuit Layout", ("sans-serif", 60))
+    //         .unwrap();
+    //     halo2_proofs::dev::CircuitLayout
+    //         // You can optionally render only a section of the circuit.
+    //         .view_width(0..2)
+    //         .view_height(0..16)
+    //         // You can hide labels, which can be useful with smaller areas.
+    //         .show_labels(false)
+    //         // Render the circuit onto your area!
+    //         // The first argument is the size parameter for the circuit.
+    //         .render(5, &circuit, &root)
+    //         .unwrap()
+    // }
 }
