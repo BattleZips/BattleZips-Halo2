@@ -1,49 +1,31 @@
-use bitvec::prelude::*;
 use crate::utils::binary::bits2num;
+use bitvec::prelude::*;
+use halo2_proofs::{
+    arithmetic::FieldExt,
+    circuit::AssignedCell,
+};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ShipType {
-    Carrier,
-    Battleship,
-    Destroyer,
-    Submarine,
-    Cruiser,
-}
+// #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+// pub enum ShipType {
+//     Carrier,
+//     Battleship,
+//     Destroyer,
+//     Submarine,
+//     Cruiser,
+// }
 
 /**
  * Definition of a ship's placement on a board
  */
 #[derive(Clone, Copy, Debug)]
-pub struct Placement<const T: ShipType> {
-    x: u8, // [0, 9]
-    y: u8, // [0, 9]
-    z: bool,
+pub struct ShipPlacement<const S: usize> {
+    pub x: u8, // [0, 9]
+    pub y: u8, // [0, 9]
+    pub z: bool,
 }
 
-// Definition of the ship utilitity functions that operate on ship data
-
-pub trait ShipUtilities<const T: ShipType> {
-    /**
-     * Given a ship type, return its length
-     *
-     * @param ship - the type of ship being queried for length
-     * @return - the length of the ship [2, 5]
-     */
-    fn ship_len(ship: ShipType) -> u8;
-
-    /**
-     * Given a ship type, return its name as a string
-     *
-     * @param ship - the type of ship being queried for name
-     * @return - the name of the ship as a string
-     */
-    fn ship_name(ship: ShipType) -> String;
-
-    /**
-     * Constructs an empty ship object
-     */
-    fn empty(ship: ShipType) -> Placement<T>;
-
+// Implementation of ship utility functions
+impl<const S: usize> ShipPlacement<S> {
     /**
      * Construct a new ShipData object according to a given spec
      * @dev - use ShipData::valid() to check whether a ship's placement is valid
@@ -54,108 +36,64 @@ pub trait ShipUtilities<const T: ShipType> {
      * @param z - dictates whether ship extends from x, y horizontally or veritcally
      * @return - instantiated ShipData object containing input parameters for future use
      */
-    fn construct(ship_type: ShipType, x: u8, y: u8, z: bool) -> Placement<T>;
+    pub fn construct(x: u8, y: u8, z: bool) -> ShipPlacement<S> {
+        ShipPlacement { x, y, z }
+    }
 
-    // /**
-    //  * Export the coordinates the ship is placed on as a vector
-    //  *
-    //  * @param vertical - if true, order traversal of each column before row
-    //  *     - ex: [x: 4, y: 7] - return: if vertical { 74 } else { 47 }
-    //  * @return - vector (of the length of the ship) of consecutive cells containing ship
-    //  */
-    // fn export_coordinates(self, vertical: bool) -> Vec<u8>;
-
-    // /**
-    //  * Export the bitvec representation of the ship placement
-    //  *
-    //  * @param vertical - if true, place ship with y axis horizontal and x vertical
-    //  *     - ex: [x: 1, y: 0, z: 0, l: 4] -> bits flipped @ [10, 20, 30, 40]
-    //  *     - ex: [x: 1, y: 0, z: 1, l: 4] -> bits flipped @ [10, 11, 12, 13]
-    //  * @return - 100 bit long vector of ship arrangement
-    //  */
-    // fn export_bitvec(self, vertical: bool) -> BitVec<u8>;
-
-    // /**
-    //  * Export the bitvec representation of the ship placement
-    //  *
-    //  * @param vertical - if true, export vertical orientation, else export horizontal
-    //  * @return - 128 bit integer encoded board (really 100 bits)
-    //  */
-    // fn export_element(self, vertical: bool) -> u128;
-}
-
-// Implementation of ship utility functions
-impl<const T: ShipType> ShipUtilities<T> for Placement<T> {
-    fn ship_len(ship: ShipType) -> u8 {
-        match ship {
-            ShipType::Carrier => 5,
-            ShipType::Battleship => 4,
-            ShipType::Destroyer => 3,
-            ShipType::Submarine => 3,
-            ShipType::Cruiser => 2,
+    /**
+     * Export the coordinates the ship is placed on as a vector
+     * @notice arrange byte order based on horizontal/ vertical orientation
+     *     - ex: [x: 4, y: 7] - return: z = true { 74 } else { 47 }
+     * @return - vector (of the length of the ship) of consecutive cells containing ship
+     */
+    pub fn to_coordinates(self) -> [u8; S] {
+        let mut coordinates = vec![0u8; S];
+        for i in 0..S {
+            // compute cell
+            coordinates[i] = if self.z == false {
+                (self.x + i as u8) * 10 + self.y
+            } else {
+                (self.y + i as u8) * 10 + self.x
+            }
         }
+        coordinates.try_into().unwrap()
     }
 
-    fn ship_name(ship: ShipType) -> String {
-        let name = match ship {
-            ShipType::Carrier => "Carrier",
-            ShipType::Battleship => "Battleship",
-            ShipType::Destroyer => "Destroyer",
-            ShipType::Submarine => "Submarine",
-            ShipType::Cruiser => "Cruiser",
-        };
-        name.to_string()
-    }
-
-    fn empty(ship: ShipType) -> Placement<T> {
-        Placement {
-            x: 0,
-            y: 0,
-            z: false,
+    /**
+     * Export the bitvec representation of the ship placement
+     * @notice bits ordered according to horizontal/ vertical orientation
+     *     - ex: [x: 1, y: 0, z: 0, l: 4] -> bits flipped @ [10, 20, 30, 40]
+     *     - ex: [x: 1, y: 0, z: 1, l: 4] -> bits flipped @ [10, 11, 12, 13]
+     * @return - 100 bit long array of ship arrangement
+     */
+    pub fn to_bits(self) -> BitVec<u8> {
+        let coordinates = self.to_coordinates();
+        let mut board = 0u128.to_le_bytes().view_bits::<Lsb0>()[..100].to_bitvec();
+        for coordinate in coordinates {
+            board.set(coordinate as usize, true);
         }
+        board
     }
 
-    fn construct(ship_type: ShipType, x: u8, y: u8, z: bool) -> Placement<T> {
-        Placement { x, y, z }
+    // /**
+    //  * Export array of bits (as shown in bitvec version) instantiated as field elements
+    //  * @return - 100 bit long array of ship arrangement
+    //  */
+    // pub fn to_bits_f<F: FieldExt>(self) -> [AssignedCell<F, F>; 100] {
+    //     self.to_bits()
+    //         .iter().map(|bit| )
+
+    // }
+
+    /**
+     * Export the bitvec representation of the ship placement
+     *
+     * @param vertical - if true, export vertical orientation, else export horizontal
+     * @return - 128 bit integer encoded board (really 100 bits)
+     */
+    pub fn to_decimal(self) -> u128 {
+        bits2num(&self.to_bits())
     }
-
-    // fn export_coordinates(self, vertical: bool) -> Vec<u8> {
-    //     let ship_length = ShipUtilities::ship_len(self.ship_type);
-    //     let mut coordinates = vec![0u8, ship_length];
-    //     for i in 0..ship_length {
-    //         // compute cell
-    //         let x = if self.placement.z == false {
-    //             self.placement.x + i
-    //         } else {
-    //             self.placement.x
-    //         };
-    //         let y = if self.placement.z == false {
-    //             self.placement.y
-    //         } else {
-    //             self.placement.y + i
-    //         };
-    //         // store cell depending on orientation
-    //         coordinates[0] = if vertical == false {
-    //             x * 10 + y
-    //         } else {
-    //             y * 10 + x
-    //         }
-    //     }
-    //     coordinates
-    // }
-
-    // fn export_bitvec(self, vertical: bool) -> BitVec<u8> {
-    //     let coordinates = self.export_coordinates(vertical);
-    //     let mut board = 0u128.to_le_bytes().view_bits::<Lsb0>()[..100].to_bitvec();
-    //     for coordinate in coordinates {
-    //         board.set(coordinate as usize, true);
-    //     }
-    //     board
-    // }
-
-    // fn export_element(self, vertical: bool) -> u128 {
-    //     bits2num(&self.export_bitvec(vertical))
-    // }
 }
 
 #[cfg(test)]
@@ -163,7 +101,9 @@ pub mod tests {
     use super::*;
 
     #[test]
-    fn t0_general_use() {}
+    fn t0_general_use() {
+        let ship = ShipPlacement::<5>::construct(3, 3, false);
+    }
 
     #[test]
     fn t1_validity() {}
