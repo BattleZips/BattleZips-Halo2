@@ -7,7 +7,7 @@ use halo2_proofs::{
 
 /// Configuration elements for the circuit defined here.
 /// @TODO figure out how tf this works
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Bits2NumConfig {
     /// Configures a column for the bits.
     pub bits: Column<Advice>,
