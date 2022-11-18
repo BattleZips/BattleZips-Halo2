@@ -733,5 +733,46 @@ mod test {
         }
     }
 
-    
+    #[test]
+    fn placement_valid_case_0() {
+        // check that a valid placement of carrier horizontally at 0, 0 succeeds
+        const SHIP_LENGTH: usize = 5;
+        let ship  = ShipPlacement::<SHIP_LENGTH>::construct(0, 0, false);
+        let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
+        let k = 9;
+
+        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
+        assert_eq!(prover.verify(), Ok(()));
+    }
+
+    // #[test]
+    // fn placement_invalid_case_0() {
+    //     // check that an invalid placement (attempts to assign less than necessary amount of bits)
+
+    // }
+
+    #[test]
+    fn print_circuit() {
+        use plotters::prelude::*;
+        const SHIP_LENGTH: usize = 5;
+        let ship = ShipPlacement::<SHIP_LENGTH>::construct(0, 0, false);
+        let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
+        let root =
+            BitMapBackend::new("src/placement/placement_layout.png", (1024, 768)).into_drawing_area();
+        root.fill(&WHITE).unwrap();
+        let root = root
+            .titled("Placement Circuit Layout", ("sans-serif", 60))
+            .unwrap();
+
+        CircuitLayout::default()
+            // You can optionally render only a section of the circuit.
+            .view_width(0..2)
+            .view_height(0..16)
+            // You can hide labels, which can be useful with smaller areas.
+            .show_labels(false)
+            // Render the circuit onto your area!
+            // The first argument is the size parameter for the circuit.
+            .render(9, &circuit, &root)
+            .unwrap();
+    }
 }
