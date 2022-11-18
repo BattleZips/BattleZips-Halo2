@@ -34,7 +34,7 @@ const BOARD_SIZE: usize = 100;
  * @param q_constrain_placement - toggle to constrain output to be valid
  * @param ship - Object storing/ exporting ship positioning
  */
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct PlacementConfig<F: FieldExt, const S: usize> {
     bits2num: Bits2NumConfig,
     advice: [Column<Advice>; 3],
@@ -57,6 +57,7 @@ pub struct PlacementChip<F: FieldExt, const S: usize> {
 }
 
 // defines array of 100 assigned bits in a column (little endian)
+#[derive(Clone, Debug)]
 pub struct BoardState<F: FieldExt> {
     pub bits: [AssignedCell<F, F>; BOARD_SIZE],
 }
@@ -88,7 +89,7 @@ impl<F: FieldExt> BoardState<F> {
                 let bits: [AssignedCell<F, F>; S] = self.bits[offset..offset + S]
                     .to_vec()
                     .iter()
-                    .map(|bit| *bit)
+                    .map(|bit| bit.clone())
                     .collect::<Vec<AssignedCell<F, F>>>()
                     .try_into()
                     .unwrap();
@@ -161,24 +162,21 @@ impl<F: FieldExt> PlacementState<F> {
         region: &mut Region<F>,
         config: &PlacementConfig<F, S>,
     ) -> Result<BoardState<F>, Error> {
-        let mut permuted: [Option<AssignedCell<F, F>>; BOARD_SIZE] = [None; BOARD_SIZE];
+        let mut permuted: Vec<AssignedCell<F, F>> = Vec::<AssignedCell<F, F>>::new();
         for i in 0..bits.bits.len() {
-            let bit = bits.bits[i];
-            permuted[i] = Some(
-                bit.copy_advice(
-                    || format!("permute bit {}", i),
-                    region,
-                    config.advice[0],
-                    i + 1, // offset + 1 for padded row
-                )
-                .unwrap(),
-            );
+            let bit = &bits.bits[i];
+            permuted.push(bit.copy_advice(
+                || format!("permute bit {}", i),
+                region,
+                config.advice[0],
+                i + 1, // offset + 1 for padded row
+            )?);
         }
 
         Ok(BoardState::from(
             permuted
                 .iter()
-                .map(|bit| bit.unwrap())
+                .map(|bit| bit.clone())
                 .collect::<Vec<AssignedCell<F, F>>>()
                 .try_into()
                 .unwrap(),
@@ -202,13 +200,13 @@ impl<F: FieldExt> PlacementState<F> {
         offset: usize,
     ) -> Result<PlacementState<F>, Error> {
         // access bit window
-        let bit_window = bits.get_bit_window::<S>(offset).unwrap();
+        let bit_window = bits.clone().get_bit_window::<S>(offset).unwrap();
         let mut window_count = Value::known(F::zero());
         for bit in bit_window {
             window_count = window_count + bit.value();
         }
         // compute current bit sum
-        let bit_sum_value = bit_window[0].value().copied() + self.bit_sum.value().copied();
+        let bit_sum_value = bits.bits[offset].value().copied() + self.bit_sum.value().copied();
         // compute increment on full bit window count
         let one = Value::known(F::one());
         let ship_len = Value::known(F::from(S as u64));
@@ -352,7 +350,8 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
             meta.enable_equality(col);
         }
         // allocate fixed column for constants
-        meta.enable_equality(meta.fixed_column());
+        let fixed = meta.fixed_column();
+        meta.enable_equality(fixed);
 
         // bits2num region: advice[0]: bits; advice[1]: lc1; advice[2]: e2
         // placement input region: advice[0]: bits; advice[1]: bit count running sum; advice[2]: full bit window running sum
@@ -505,7 +504,7 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
 
     pub fn synthesize(&self, mut layouter: impl Layouter<F>) -> Result<(), Error> {
         let placement_commitments = self.load_placement(&mut layouter)?;
-        let bits = self.synth_bits2num(&mut layouter, placement_commitments[0])?;
+        let bits = self.synth_bits2num(&mut layouter, placement_commitments[0].clone())?;
         let running_sums = self.placement_sums(&mut layouter, bits)?;
         self.assign_constraint(&mut layouter, running_sums);
         Ok(())
@@ -531,9 +530,9 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
         };
         let sum = horizontal + vertical;
         // storage variable for assigned cell holding sum(h, v) to be constrained to bits2num
-        let mut assigned: [AssignedCell<F, F>; 3] = layouter.assign_region(
+        let assigned: [AssignedCell<F, F>; 3] = layouter.assign_region(
             || "load placement encoded values",
-            |region: Region<F>| {
+            |mut region: Region<F>| {
                 self.config.q_placement_orientation.enable(&mut region, 0);
                 let sum = region.assign_advice(
                     || "sum of h & v placements",
