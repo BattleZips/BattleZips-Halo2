@@ -43,18 +43,27 @@ pub struct PlacementConfig<F: FieldExt, const S: usize> {
     q_bit_adjacency: Selector,
     q_adjacency_permute: Selector,
     q_constrain_placement: Selector,
-
-    ship: ShipPlacement<S>,
     _marker: PhantomData<F>,
 }
 
-// The set of instructions required to prove a ship placement does not violate battleship rules
-// @notice does not prevent overlap
-// pub trait PlacementInstructions<F: FieldExt, const S: usize>: Chip<F> {}
-
 pub struct PlacementChip<F: FieldExt, const S: usize> {
     config: PlacementConfig<F, S>,
+    ship: ShipPlacement<S>,
 }
+
+impl<F: FieldExt, const S: usize> Chip<F> for PlacementChip<F, S> {
+    type Config = PlacementConfig<F, S>;
+    type Loaded = ();
+
+    fn config(&self) -> &Self::Config {
+        &self.config
+    }
+
+    fn loaded(&self) -> &Self::Loaded {
+        &()
+    }
+}
+
 
 // defines array of 100 assigned bits in a column (little endian)
 #[derive(Clone, Debug)]
@@ -230,9 +239,9 @@ impl<F: FieldExt> PlacementState<F> {
             || full_window_sum_value,
         )?;
         // toggle selector for adjacency gate for this row
-        config.q_bit_adjacency.enable(region, offset);
+        config.q_bit_adjacency.enable(region, offset)?;
         // toggle selector for bit sum for this row
-        config.q_bit_sum.enable(region, offset);
+        config.q_bit_sum.enable(region, offset)?;
         Ok(Self {
             bit_sum,
             full_window_sum,
@@ -273,9 +282,9 @@ impl<F: FieldExt> PlacementState<F> {
             || full_window_sum_value.copied(),
         )?;
         // toggle selector for bit permute for this row
-        config.q_adjacency_permute.enable(region, offset);
+        config.q_adjacency_permute.enable(region, offset)?;
         // toggle selector for bit sum for this row
-        config.q_bit_sum.enable(region, offset);
+        config.q_bit_sum.enable(region, offset)?;
         Ok(Self {
             bit_sum,
             full_window_sum,
@@ -286,13 +295,15 @@ impl<F: FieldExt> PlacementState<F> {
 pub trait PlacementInstructions<F: FieldExt, const S: usize> {
     /*
      * Loads decimal encoding of horizontal placement, vertical placement, and sum of the two
-     * @dev uses x, y, z, l from Placement to construct
+     * @dev constrains horizontal and vertical to be equal from other region
      *
      * @return - reference to assigned cells on which further constraints are performed
      */
     fn load_placement(
         &self,
-        Layouter: &mut impl Layouter<F>,
+        layouter: &mut impl Layouter<F>,
+        horizontal: AssignedCell<F, F>,
+        vertical: AssignedCell<F, F>,
     ) -> Result<[AssignedCell<F, F>; 3], Error>;
 
     /**
@@ -303,7 +314,7 @@ pub trait PlacementInstructions<F: FieldExt, const S: usize> {
      */
     fn synth_bits2num(
         &self,
-        Layouter: &mut impl Layouter<F>,
+        layouter: &mut impl Layouter<F>,
         value: AssignedCell<F, F>,
     ) -> Result<BoardState<F>, Error>;
 
@@ -315,7 +326,7 @@ pub trait PlacementInstructions<F: FieldExt, const S: usize> {
      */
     fn placement_sums(
         &self,
-        Layouter: &mut impl Layouter<F>,
+        layouter: &mut impl Layouter<F>,
         bits: BoardState<F>,
     ) -> Result<PlacementState<F>, Error>;
 
@@ -333,17 +344,14 @@ pub trait PlacementInstructions<F: FieldExt, const S: usize> {
 }
 
 impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
-    pub fn construct(config: PlacementConfig<F, S>) -> Self {
-        PlacementChip { config }
+    pub fn new(config: PlacementConfig<F, S>, ship: ShipPlacement<S>) -> Self {
+        PlacementChip { config, ship }
     }
 
     /**
      * Configure the computation space of the circuit & return PlacementConfig
      */
-    pub fn configure(
-        meta: &mut ConstraintSystem<F>,
-        ship: ShipPlacement<S>,
-    ) -> PlacementConfig<F, S> {
+    pub fn configure(meta: &mut ConstraintSystem<F>) -> PlacementConfig<F, S> {
         // define advice columns
         let advice = [meta.advice_column(); 3];
         for col in advice {
@@ -408,8 +416,9 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
             // query full bit window running sum at column (A^4)
             let prev_running_sum = meta.query_advice(advice[2], Rotation::prev());
             let running_sum = meta.query_advice(advice[2], Rotation::cur());
-            // fixed ship length
+            // constant expressions
             let ship_len = Expression::Constant(F::from(S as u64));
+            let one = Expression::Constant(F::one());
 
             /*
              * Constrain the expected value for the full bit window running sum
@@ -421,9 +430,6 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
              */
             let running_sum_exp =
                 |count: Expression<F>, prev: Expression<F>, sum: Expression<F>| {
-                    // constant expressions
-                    let ship_len = Expression::Constant(F::from(S as u64));
-                    let one = Expression::Constant(F::one());
                     // variable expressions
                     let increment_case = prev.clone() + one.clone() - sum.clone();
                     let equal_case = prev.clone() - sum.clone();
@@ -497,16 +503,20 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
             q_bit_adjacency,
             q_adjacency_permute,
             q_constrain_placement,
-            ship,
             _marker: PhantomData,
         }
     }
 
-    pub fn synthesize(&self, mut layouter: impl Layouter<F>) -> Result<(), Error> {
-        let placement_commitments = self.load_placement(&mut layouter)?;
+    pub fn synthesize(
+        &self,
+        mut layouter: impl Layouter<F>,
+        horizontal: AssignedCell<F, F>,
+        vertical: AssignedCell<F, F>,
+    ) -> Result<(), Error> {
+        let placement_commitments = self.load_placement(&mut layouter, horizontal, vertical)?;
         let bits = self.synth_bits2num(&mut layouter, placement_commitments[0].clone())?;
         let running_sums = self.placement_sums(&mut layouter, bits)?;
-        self.assign_constraint(&mut layouter, running_sums);
+        self.assign_constraint(&mut layouter, running_sums)?;
         Ok(())
     }
 }
@@ -515,44 +525,36 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
     fn load_placement(
         &self,
         layouter: &mut impl Layouter<F>,
+        horizontal: AssignedCell<F, F>,
+        vertical: AssignedCell<F, F>,
     ) -> Result<[AssignedCell<F, F>; 3], Error> {
         // variables used to construct witness
-        let decimal = self.config.ship.to_decimal();
-        let horizontal = if self.config.ship.z {
-            Value::known(F::from_u128(decimal))
-        } else {
-            Value::known(F::zero())
-        };
-        let vertical = if self.config.ship.z {
-            Value::known(F::zero())
-        } else {
-            Value::known(F::from_u128(decimal))
-        };
-        let sum = horizontal + vertical;
+
+        let sum = horizontal.value().copied() + vertical.value().copied();
         // storage variable for assigned cell holding sum(h, v) to be constrained to bits2num
         let assigned: [AssignedCell<F, F>; 3] = layouter.assign_region(
             || "load placement encoded values",
             |mut region: Region<F>| {
-                self.config.q_placement_orientation.enable(&mut region, 0);
+                _ = self.config.q_placement_orientation.enable(&mut region, 0);
                 let sum = region.assign_advice(
                     || "sum of h & v placements",
                     self.config.advice[0],
                     0,
                     || sum,
                 )?;
-                let horizontal = region.assign_advice(
-                    || "horizontal placement",
+                let horizontal_cell = horizontal.copy_advice(
+                    || "permute horizontal placement",
+                    &mut region,
                     self.config.advice[1],
                     0,
-                    || horizontal,
                 )?;
-                let vertical = region.assign_advice(
-                    || "vertical placements",
+                let vertical_cell = vertical.copy_advice(
+                    || "permute horizontal placement",
+                    &mut region,
                     self.config.advice[2],
                     0,
-                    || vertical,
                 )?;
-                Ok([sum, horizontal, vertical])
+                Ok([sum, horizontal_cell, vertical_cell])
             },
         )?;
         Ok(assigned)
@@ -564,7 +566,7 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
         value: AssignedCell<F, F>,
     ) -> Result<BoardState<F>, Error> {
         let bits: [F; BOARD_SIZE] =
-            bits_to_field_elements::<F, BOARD_SIZE>(unwrap_bitvec(self.config.ship.to_bits()));
+            bits_to_field_elements::<F, BOARD_SIZE>(unwrap_bitvec(self.ship.to_bits()));
         let bits2num = Bits2NumChip::<F, BOARD_SIZE>::new(value, bits);
         let assigned_bits =
             bits2num.synthesize(self.config.bits2num, layouter.namespace(|| "bits2num"))?;
@@ -615,16 +617,121 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
                     &mut region,
                     self.config.advice[1],
                     0,
-                );
+                )?;
                 state.full_window_sum.copy_advice(
                     || "copy full bit window total count to constaint region",
                     &mut region,
                     self.config.advice[1],
                     0,
-                );
-                self.config.q_constrain_placement.enable(&mut region, 0);
+                )?;
+                self.config.q_constrain_placement.enable(&mut region, 0)?;
                 Ok(())
             },
         )?)
     }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use halo2_proofs::{
+        circuit::SimpleFloorPlanner,
+        dev::{CircuitLayout, MockProver},
+        pasta::{group::ff::PrimeFieldBits, Fp},
+        plonk::Circuit,
+    };
+
+    #[derive(Debug, Clone, Copy)]
+    struct TestConfig<const S: usize> {
+        pub placement_config: PlacementConfig<Fp, S>,
+        pub trace: Column<Advice>,
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    struct TestCircuit<const S: usize> {
+        pub ship: ShipPlacement<S>,
+    }
+
+    impl<const S: usize> TestCircuit<S> {
+        fn new(ship: ShipPlacement<S>) -> TestCircuit<S> {
+            TestCircuit { ship }
+        }
+
+        /**
+         * Assign the horizontal and vertical placement values in the test circuit
+         *
+         * @return - if successful, references to cell assignments for [horizontal, vertical]
+         */
+        fn witness_trace(
+            &self,
+            layouter: &mut impl Layouter<Fp>,
+            config: TestConfig<S>
+        ) -> Result<[AssignedCell<Fp, Fp>; 2], Error> {
+            Ok(layouter.assign_region(
+                || "placement ship test trace",
+                |mut region| {
+                    // compute horizontal and vertical values
+                    let decimal = self.ship.to_decimal();
+                    let horizontal = if self.ship.z {
+                        Value::known(Fp::from_u128(decimal))
+                    } else {
+                        Value::known(Fp::zero())
+                    };
+                    let vertical = if self.ship.z {
+                        Value::known(Fp::zero())
+                    } else {
+                        Value::known(Fp::from_u128(decimal))
+                    };
+                    let horizontal_cell = region.assign_advice(
+                        || "assign horizontal to test trace",
+                        config.trace,
+                        0,
+                        || horizontal,
+                    )?;
+                    let vertical_cell = region.assign_advice(
+                        || "assign vertical to test trace",
+                        config.trace,
+                        1,
+                        || vertical,
+                    )?;
+                    Ok([horizontal_cell, vertical_cell])
+                },
+            )?)
+        }
+    }
+
+    impl<const S: usize> Circuit<Fp> for TestCircuit<S> {
+        type Config = TestConfig<S>;
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            self.clone()
+        }
+
+        fn configure(meta: &mut ConstraintSystem<Fp>) -> TestConfig<S> {
+            let placement_config = PlacementChip::<Fp, S>::configure(meta);
+            let trace = meta.advice_column();
+            meta.enable_equality(trace);
+
+            TestConfig {
+                placement_config,
+                trace,
+            }
+        }
+
+        fn synthesize(
+            &self,
+            config: TestConfig<S>,
+            mut layouter: impl Layouter<Fp>,
+        ) -> Result<(), Error> {
+            // assign test trace
+            let commitments = self.witness_trace(&mut layouter, config)?;
+            let chip = PlacementChip::<Fp, S>::new(config.placement_config, self.ship);
+            _ = chip.synthesize(layouter, commitments[0].clone(), commitments[1].clone());
+            Ok(())
+        }
+    }
+
+    
 }
