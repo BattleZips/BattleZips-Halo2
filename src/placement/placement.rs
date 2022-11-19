@@ -64,7 +64,6 @@ impl<F: FieldExt, const S: usize> Chip<F> for PlacementChip<F, S> {
     }
 }
 
-
 // defines array of 100 assigned bits in a column (little endian)
 #[derive(Clone, Debug)]
 pub struct BoardState<F: FieldExt> {
@@ -353,10 +352,13 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
      */
     pub fn configure(meta: &mut ConstraintSystem<F>) -> PlacementConfig<F, S> {
         // define advice columns
-        let advice = [meta.advice_column(); 3];
-        for col in advice {
+        let mut advice = Vec::<Column<Advice>>::new();
+        for _ in 0..3 {
+            let col = meta.advice_column();
             meta.enable_equality(col);
+            advice.push(col);
         }
+        let advice: [Column<Advice>; 3] = advice.try_into().unwrap();
         // allocate fixed column for constants
         let fixed = meta.fixed_column();
         meta.enable_equality(fixed);
@@ -514,11 +516,8 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
         vertical: AssignedCell<F, F>,
     ) -> Result<(), Error> {
         let placement_commitments = self.load_placement(&mut layouter, horizontal, vertical)?;
-        // println!("commitment: {:?}", placement_commitments[0].clone());
-        let bits = self.synth_bits2num(&mut layouter, placement_commitments[0].clone())?;
-        for bit in bits.bits {
-            println!("x: {:?}", bit.value())
-        }
+        println!("commitment: {:?}", placement_commitments[0].clone());
+        // let bits = self.synth_bits2num(&mut layouter, placement_commitments[0].clone())?;
         // let running_sums = self.placement_sums(&mut layouter, bits)?;
         // self.assign_constraint(&mut layouter, running_sums)?;
         Ok(())
@@ -558,10 +557,7 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
                     self.config.advice[2],
                     0,
                 )?;
-                println!("horizontal: {:?}", horizontal_cell.value());
-                println!("vertical: {:?}", vertical_cell.value());
-                println!("sum: {:?}", sum.value());
-                Ok([sum, horizontal_cell, vertical_cell])
+                Ok([sum, horizontal_cell.clone(), vertical_cell.clone()])
             },
         )?;
         Ok(assigned)
@@ -574,7 +570,6 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
     ) -> Result<BoardState<F>, Error> {
         let bits: [F; BOARD_SIZE] =
             bits_to_field_elements::<F, BOARD_SIZE>(unwrap_bitvec(self.ship.to_bits()));
-        println!("fr bits: {:?}", bits);
         let bits2num = Bits2NumChip::<F, BOARD_SIZE>::new(value, bits);
         let assigned_bits =
             bits2num.synthesize(self.config.bits2num, layouter.namespace(|| "bits2num"))?;
@@ -674,14 +669,13 @@ mod test {
         fn witness_trace(
             &self,
             layouter: &mut impl Layouter<Fp>,
-            config: TestConfig<S>
+            config: TestConfig<S>,
         ) -> Result<[AssignedCell<Fp, Fp>; 2], Error> {
             Ok(layouter.assign_region(
                 || "placement ship test trace",
                 |mut region| {
                     // compute horizontal and vertical values
                     let decimal = self.ship.to_decimal();
-                    println!("decimal: {:?}", decimal);
                     let horizontal = if self.ship.z {
                         Value::known(Fp::zero())
                     } else {
@@ -746,7 +740,7 @@ mod test {
     fn placement_valid_case_0() {
         // check that a valid placement of carrier horizontally at 0, 0 succeeds
         const SHIP_LENGTH: usize = 5;
-        let ship  = ShipPlacement::<SHIP_LENGTH>::construct(0, 0, false);
+        let ship = ShipPlacement::<SHIP_LENGTH>::construct(0, 0, false);
         let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
         let k = 9;
 
@@ -760,14 +754,14 @@ mod test {
 
     // }
 
-    #[test]
+    // #[test]
     fn print_circuit() {
         use plotters::prelude::*;
         const SHIP_LENGTH: usize = 5;
         let ship = ShipPlacement::<SHIP_LENGTH>::construct(0, 0, false);
         let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
-        let root =
-            BitMapBackend::new("src/placement/placement_layout.png", (1024, 768)).into_drawing_area();
+        let root = BitMapBackend::new("src/placement/placement_layout.png", (1024, 768))
+            .into_drawing_area();
         root.fill(&WHITE).unwrap();
         let root = root
             .titled("Placement Circuit Layout", ("sans-serif", 60))
@@ -775,7 +769,7 @@ mod test {
 
         CircuitLayout::default()
             // You can optionally render only a section of the circuit.
-            .view_width(0..2) 
+            .view_width(0..2)
             .view_height(0..16)
             // You can hide labels, which can be useful with smaller areas.
             .show_labels(false)
