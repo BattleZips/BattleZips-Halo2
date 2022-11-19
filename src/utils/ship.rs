@@ -51,9 +51,9 @@ impl<const S: usize> ShipPlacement<S> {
         for i in 0..S {
             // compute cell
             coordinates[i] = if self.z == false {
-                (self.x + i as u8) * 10 + self.y
+                10 * self.x + self.y + i as u8
             } else {
-                (self.y + i as u8) * 10 + self.x
+                10 * self.y + self.x + i as u8
             }
         }
         coordinates.try_into().unwrap()
@@ -72,6 +72,7 @@ impl<const S: usize> ShipPlacement<S> {
         for coordinate in coordinates {
             board.set(coordinate as usize, true);
         }
+        // @dev need better use of endianness
         board
     }
 
@@ -92,7 +93,9 @@ impl<const S: usize> ShipPlacement<S> {
      * @return - 128 bit integer encoded board (really 100 bits)
      */
     pub fn to_decimal(self) -> u128 {
-        bits2num(&self.to_bits())
+        let mut bits = self.to_bits();
+        bits.reverse(); // @dev poor understanding of endianness :,(
+        bits2num(&bits)
     }
 }
 

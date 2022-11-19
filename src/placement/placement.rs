@@ -514,9 +514,13 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
         vertical: AssignedCell<F, F>,
     ) -> Result<(), Error> {
         let placement_commitments = self.load_placement(&mut layouter, horizontal, vertical)?;
+        // println!("commitment: {:?}", placement_commitments[0].clone());
         let bits = self.synth_bits2num(&mut layouter, placement_commitments[0].clone())?;
-        let running_sums = self.placement_sums(&mut layouter, bits)?;
-        self.assign_constraint(&mut layouter, running_sums)?;
+        for bit in bits.bits {
+            println!("x: {:?}", bit.value())
+        }
+        // let running_sums = self.placement_sums(&mut layouter, bits)?;
+        // self.assign_constraint(&mut layouter, running_sums)?;
         Ok(())
     }
 }
@@ -554,6 +558,9 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
                     self.config.advice[2],
                     0,
                 )?;
+                println!("horizontal: {:?}", horizontal_cell.value());
+                println!("vertical: {:?}", vertical_cell.value());
+                println!("sum: {:?}", sum.value());
                 Ok([sum, horizontal_cell, vertical_cell])
             },
         )?;
@@ -567,6 +574,7 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
     ) -> Result<BoardState<F>, Error> {
         let bits: [F; BOARD_SIZE] =
             bits_to_field_elements::<F, BOARD_SIZE>(unwrap_bitvec(self.ship.to_bits()));
+        println!("fr bits: {:?}", bits);
         let bits2num = Bits2NumChip::<F, BOARD_SIZE>::new(value, bits);
         let assigned_bits =
             bits2num.synthesize(self.config.bits2num, layouter.namespace(|| "bits2num"))?;
@@ -673,15 +681,16 @@ mod test {
                 |mut region| {
                     // compute horizontal and vertical values
                     let decimal = self.ship.to_decimal();
+                    println!("decimal: {:?}", decimal);
                     let horizontal = if self.ship.z {
-                        Value::known(Fp::from_u128(decimal))
-                    } else {
                         Value::known(Fp::zero())
+                    } else {
+                        Value::known(Fp::from_u128(decimal))
                     };
                     let vertical = if self.ship.z {
-                        Value::known(Fp::zero())
-                    } else {
                         Value::known(Fp::from_u128(decimal))
+                    } else {
+                        Value::known(Fp::zero())
                     };
                     let horizontal_cell = region.assign_advice(
                         || "assign horizontal to test trace",
@@ -766,7 +775,7 @@ mod test {
 
         CircuitLayout::default()
             // You can optionally render only a section of the circuit.
-            .view_width(0..2)
+            .view_width(0..2) 
             .view_height(0..16)
             // You can hide labels, which can be useful with smaller areas.
             .show_labels(false)

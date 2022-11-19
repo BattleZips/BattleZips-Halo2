@@ -139,7 +139,10 @@ mod test {
         plonk::Circuit,
     };
 
-    use crate::utils::binary::{bits_to_field_elements, bytes2bits, unwrap_bitarr};
+    use crate::utils::{
+        binary::{bits_to_field_elements, bytes2bits, unwrap_bitarr},
+        ship::ShipPlacement
+    };
 
     #[derive(Clone)]
     struct TestConfig {
@@ -264,6 +267,11 @@ mod test {
         let prover = MockProver::run(k, &circuit, vec![]).unwrap();
 
         assert_eq!(prover.verify(), Ok(()));
+    }
+
+    #[test]
+    fn test_battlezips() {
+        // demonstration that ShipPlacement gadget interfaces as intended with bits2num circuit 
     }
 
     #[test]
