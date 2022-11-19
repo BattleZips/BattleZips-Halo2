@@ -134,14 +134,14 @@ mod test {
     use super::*;
     use halo2_proofs::{
         circuit::SimpleFloorPlanner,
-        dev::{CircuitLayout, MockProver},
+        dev::{metadata, CircuitLayout, FailureLocation, MockProver, VerifyFailure},
         pasta::{group::ff::PrimeFieldBits, Fp},
-        plonk::Circuit,
+        plonk::{Any, Circuit},
     };
 
     use crate::utils::{
-        binary::{bits_to_field_elements, bytes2bits, unwrap_bitarr},
-        ship::ShipPlacement
+        binary::{bits_to_field_elements, bytes2bits, unwrap_bitarr, unwrap_bitvec},
+        ship::ShipPlacement,
     };
 
     #[derive(Clone)]
@@ -271,7 +271,43 @@ mod test {
 
     #[test]
     fn test_battlezips() {
-        // demonstration that ShipPlacement gadget interfaces as intended with bits2num circuit 
+        // demonstration that ShipPlacement gadget interfaces as intended with bits2num circuit
+        // demonstrate with a carrier ship (length 5) placed vertically at x:4, y: 3
+
+        // prepare values to be witnessed by mock circuit
+        const SHIP_LENGTH: usize = 5;
+        const BOARD_SIZE: usize = 100;
+        let ship = ShipPlacement::<SHIP_LENGTH>::construct(4, 3, true);
+        let bits = unwrap_bitvec(ship.to_bits());
+        let decimal = ship.to_decimal();
+
+        // use values with bits2num test circuit
+        let circuit = TestCircuit::<BOARD_SIZE>::new(Fp::from_u128(decimal), bits);
+        let k = 9;
+        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
+        assert_eq!(prover.verify(), Ok(()));
+        
+        // check that value fails if decimal is incremented
+        let decimal = ship.to_decimal() + 1u128;
+        let circuit = TestCircuit::<BOARD_SIZE>::new(Fp::from_u128(decimal), bits);
+        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
+        assert_eq!(
+            prover.verify(),
+            Err(vec![VerifyFailure::Permutation {
+                column: metadata::Column::from((Any::Advice, 1)),
+                location: FailureLocation::InRegion {
+                    region: (1, "bits2num").into(),
+                    offset: 100
+                }
+            }, VerifyFailure::Permutation {
+                column: metadata::Column::from((Any::Advice, 3)),
+                location: FailureLocation::InRegion {
+                    region: (0, "trace").into(),
+                    offset: 0
+                }
+            }
+            ])
+        );
     }
 
     #[test]

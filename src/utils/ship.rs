@@ -1,4 +1,4 @@
-use crate::utils::binary::bits2num;
+use crate::utils::binary::{bits2num, unwrap_bitvec, bits_to_field_elements};
 use bitvec::prelude::*;
 use halo2_proofs::{
     arithmetic::FieldExt,
@@ -50,7 +50,7 @@ impl<const S: usize> ShipPlacement<S> {
         let mut coordinates = vec![0u8; S];
         for i in 0..S {
             // compute cell
-            coordinates[i] = if self.z == false {
+            coordinates[i] = if self.z {
                 10 * self.x + self.y + i as u8
             } else {
                 10 * self.y + self.x + i as u8
@@ -97,7 +97,37 @@ impl<const S: usize> ShipPlacement<S> {
         bits.reverse(); // @dev poor understanding of endianness :,(
         bits2num(&bits)
     }
+
+    /**
+     * Render ASCII to the console representing the ship placement
+     */
+    pub fn print(self) {
+        const BOARD_SIZE: usize = 100;
+        let bits = unwrap_bitvec::<BOARD_SIZE>(self.to_bits());
+        let mut lines = Vec::<String>::new();
+        for i in 0..BOARD_SIZE {
+            if i % 10 == 0 {
+                let mut out = format!("{} |", i / 10);
+                for j in 0..10 {
+                    out = format!("{} {}", out, bits[i + j] as u8);
+                }
+                lines.push(out);
+            }
+        }
+        let horizontal_label = if self.z { "Y" } else { "X" };
+        let vertical_label = if self.z { "X" } else { "Y" };
+
+        lines.push(String::from(format!(" ({})", vertical_label)));
+        lines.reverse();
+        lines.push(String::from(format!("   -------------------- ({})", horizontal_label)));
+        lines.push(String::from("    0 1 2 3 4 5 6 7 8 9"));
+
+        for line in lines {
+            println!("{}", line);
+        }
+    }
 }
+
 
 #[cfg(test)]
 pub mod tests {
