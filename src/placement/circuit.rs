@@ -11,9 +11,9 @@ mod test {
         halo2_proofs::{
             arithmetic::FieldExt,
             circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
-            dev::{CircuitLayout, MockProver},
+            dev::{CircuitLayout, FailureLocation, MockProver, VerifyFailure},
             pasta::Fp,
-            plonk::{Advice, Circuit, Column, ConstraintSystem, Error},
+            plonk::{Any, Advice, Circuit, Column, ConstraintSystem, Error},
         },
     };
 
@@ -135,23 +135,87 @@ mod test {
         assert_eq!(prover.verify(), Ok(()));
     }
 
-    // fn invalid_placement_0() {
-    //     // check that a ship horizontally placed on multiple rows fails
-    //     // ex: [49, 50, 51, 52]
-    //     const SHIP_LENGTH: usize = 5;
-    //     let ship = ShipPlacement::<SHIP_LENGTH>::construct(5, 2, true);
-    //     let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
-    //     let prover = MockProver::run(CHIP_SIZE, &circuit, vec![]).unwrap();
-    //     assert_eq!(prover.verify(), Ok(()));
-    // }
+    #[test]
+    fn invalid_placement_0() {
+        // check that a ship vertically placed on multiple rows fails
+        // ex: [49, 50, 51, 52]
+        const SHIP_LENGTH: usize = 5;
+        let ship = ShipPlacement::<SHIP_LENGTH>::construct(4, 8, true);
+        let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
+        let prover = MockProver::run(CHIP_SIZE, &circuit, vec![]).unwrap();
+        assert_eq!(
+            prover.verify(),
+            Err(vec![VerifyFailure::ConstraintNotSatisfied {
+                constraint: (
+                    (5, "running sum constraints").into(),
+                    1,
+                    "One full bit window"
+                ).into(),
+                location: FailureLocation::InRegion {
+                    region: (4, "constrain running sum output").into(),
+                    offset: 0
+                },
+                cell_values: vec![(
+                    ((Any::Advice, 2).into(), 0).into(),
+                    String::from("0")
+                )]
+            }])
+        );
+    }
 
-    // fn invalid_placement_1() {
-    //     // check that a ship vertically placed on multiple rows fails
-    // }
+    #[test]
+    fn invalid_placement_1() {
+        // check that a ship horizontally placed on multiple rows fails
+        // ex: [39, 40]
+        const SHIP_LENGTH: usize = 2;
+        let ship = ShipPlacement::<SHIP_LENGTH>::construct(9, 3, false);
+        let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
+        let prover = MockProver::run(CHIP_SIZE, &circuit, vec![]).unwrap();
+        assert_eq!(
+            prover.verify(),
+            Err(vec![VerifyFailure::ConstraintNotSatisfied {
+                constraint: (
+                    (5, "running sum constraints").into(),
+                    1,
+                    "One full bit window"
+                ).into(),
+                location: FailureLocation::InRegion {
+                    region: (4, "constrain running sum output").into(),
+                    offset: 0
+                },
+                cell_values: vec![(
+                    ((Any::Advice, 2).into(), 0).into(),
+                    String::from("0")
+                )]
+            }])
+        );
+    }
 
-    // fn invalid_placement_2() {
+    #[test]
+    fn invalid_placement_2() {
+        // check that an attempt to assign both H and V fails
+    }
 
-    // }
+    #[test]
+    fn invalid_placement_3() {
+        // check that a placement with not enough bits set fails
+        // fails both bit_sum and full_window_sum
+    }
+
+    #[test]
+    fn invalid_placement_4() {
+        // check that a placement with correct # of bits but 1 > full_window_sum fails
+    }
+
+    #[test]
+    fn invalid_placement_5() {
+        // check that a placement with too many bits but 1 = full_window_sum fails
+    }
+
+    #[test]
+    fn invalid_placement_6() {
+        // check that a placement with too many bits and 1 < full_window_sum fails
+    }
 
     #[test]
     fn print_circuit() {
