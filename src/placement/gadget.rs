@@ -13,6 +13,7 @@ use {
     },
 };
 
+pub const CHIP_SIZE: u32 = 7; // circuit requires 2^7 rows
 pub const BOARD_SIZE: usize = 100; // size of board (bits in integer commitments)
 
 // defines array of 100 assigned bits in a column (little endian)
@@ -197,14 +198,14 @@ impl<F: FieldExt> InstructionUtilities<F> for PlacementState<F> {
         config.selectors[2].enable(region, 1)?;
         // iterate through trace
         // for offset in 2..=BOARD_SIZE {
-        for offset in 2..=BOARD_SIZE{
+        for offset in 2..=BOARD_SIZE {
             let adjusted_offset = offset - 1; // offset by 1 extra for padding row
 
             // assign trace
             bit_sum_cell = region.assign_advice(
                 || format!("assign running sum (bit count) {}", adjusted_offset),
                 config.advice[1],
-                offset, 
+                offset,
                 || Value::known(gadget.bit_sum[adjusted_offset]),
             )?;
             full_window_sum_cell = region.assign_advice(
@@ -234,7 +235,7 @@ impl<F: FieldExt> InstructionUtilities<F> for PlacementState<F> {
 #[derive(Clone, Copy, Debug)]
 pub struct PlacementGadget<F: FieldExt, const S: usize> {
     pub ship: ShipPlacement<S>, // object constructed from (x, y, z, len) to use ship
-    pub bits: [F; BOARD_SIZE],           // little endian decomposition of placement commitment
+    pub bits: [F; BOARD_SIZE],  // little endian decomposition of placement commitment
     pub bit_sum: [F; BOARD_SIZE], // running sum of total flipped bits in `bits` array
     pub full_window_sum: [F; BOARD_SIZE], // running sum of total full bit windows of len `S`
 }
@@ -270,7 +271,7 @@ impl<F: FieldExt, const S: usize> PlacementGadget<F, S> {
             };
             v
         };
-        
+
         // compute full bit window trace
         trace = vec![increment(0)];
         for i in 1..bits.len() {
@@ -283,13 +284,6 @@ impl<F: FieldExt, const S: usize> PlacementGadget<F, S> {
             }
         }
         let full_window_sum: [F; BOARD_SIZE] = trace.try_into().unwrap();
-        
-        // //print
-        // for i in 0..BOARD_SIZE {
-        //     println!("=-=-=-=-=-=\nbit #{}: {:?}", i, bits[i]);
-        //     println!("bit_sum: {:?}", bit_sum[i]);
-        //     println!("full_window_sum: {:?}", full_window_sum[i]);
-        // }
 
         // return object
         PlacementGadget {

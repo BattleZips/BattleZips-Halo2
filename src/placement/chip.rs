@@ -298,7 +298,7 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
         let placement_commitments = self.load_placement(&mut layouter, horizontal, vertical)?;
         let bits = self.synth_bits2num(&mut layouter, placement_commitments[0].clone())?;
         let running_sums = self.placement_sums(&mut layouter, bits, gadget)?;
-        // self.assign_constraint(&mut layouter, running_sums)?;
+        self.assign_constraint(&mut layouter, running_sums)?;
         Ok(())
     }
 }
@@ -393,10 +393,10 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
                 state.full_window_sum.copy_advice(
                     || "copy full bit window total count to constaint region",
                     &mut region,
-                    self.config.advice[1],
+                    self.config.advice[2],
                     0,
                 )?;
-                self.config.selectors[5].enable(&mut region, 0)?;
+                self.config.selectors[4].enable(&mut region, 0)?;
                 Ok(())
             },
         )?)

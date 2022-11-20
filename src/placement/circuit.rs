@@ -1,23 +1,20 @@
 #[cfg(test)]
 mod test {
-    use halo2_proofs::arithmetic::Field;
-
-
     use {
-        halo2_proofs::{
-            arithmetic::{FieldExt, lagrange_interpolate},
-            circuit::{Layouter, AssignedCell, Value, SimpleFloorPlanner},
-            dev::{CircuitLayout, MockProver},
-            pasta:: Fp,
-            plonk::{Circuit, Column, Advice, Error, ConstraintSystem}
-        },
         crate::{
             placement::{
                 chip::{PlacementChip, PlacementConfig},
-                gadget::{PlacementGadget}
+                gadget::{PlacementGadget, CHIP_SIZE},
             },
-            utils::ship::ShipPlacement
-        }
+            utils::ship::ShipPlacement,
+        },
+        halo2_proofs::{
+            arithmetic::FieldExt,
+            circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
+            dev::{CircuitLayout, MockProver},
+            pasta::Fp,
+            plonk::{Advice, Circuit, Column, ConstraintSystem, Error},
+        },
     };
 
     #[derive(Debug, Clone, Copy)]
@@ -29,7 +26,7 @@ mod test {
     #[derive(Debug, Clone, Copy)]
     struct TestCircuit<const S: usize> {
         pub ship: ShipPlacement<S>,
-        pub gadget: PlacementGadget<Fp, S>
+        pub gadget: PlacementGadget<Fp, S>,
     }
 
     impl<const S: usize> TestCircuit<S> {
@@ -108,63 +105,55 @@ mod test {
             // assign test trace
             let commitments = self.witness_trace(&mut layouter, config)?;
             let chip = PlacementChip::<Fp, S>::new(config.placement_config, self.ship);
-            _ = chip.synthesize(layouter, commitments[0].clone(), commitments[1].clone(), self.gadget);
+            _ = chip.synthesize(
+                layouter,
+                commitments[0].clone(),
+                commitments[1].clone(),
+                self.gadget,
+            );
             Ok(())
         }
     }
 
     #[test]
-    fn placement_valid_case_0() {
+    fn valid_placement_0() {
         // check that a valid placement of carrier horizontally at 0, 0 succeeds
         const SHIP_LENGTH: usize = 5;
         let ship = ShipPlacement::<SHIP_LENGTH>::construct(0, 0, false);
         let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
-        let k = 8;
-        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
+        let prover = MockProver::run(CHIP_SIZE, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
-    // #[test]
-    // fn inverse_test() {
-    //     let ship_len = Fp::from(5);
-    //     let count = Fp::from(4);
-    //     let inv = ship_len.invert().unwrap_or(Fp::zero());
-    //     ship_len.is_zero();
-    //     let exp = count * inv;
-    //     println!("inv: {:?}", exp);
-    //     let points = [Fp::from(0), Fp::from(1), Fp::from(2), Fp::from(3), Fp::from(4), Fp::from(5)];
-    //     let evals = [Fp::from(0), Fp::from(0), Fp::from(0), Fp::from(0), Fp::from(0), Fp::from(1)];
-    //     let coeff = lagrange_interpolate(&points, &evals);
+    #[test]
+    fn valid_placement_1() {
+        // check that a valid placement of battleship vertically at 5, 2 succeeds
+        const SHIP_LENGTH: usize = 4;
+        let ship = ShipPlacement::<SHIP_LENGTH>::construct(5, 2, true);
+        let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
+        let prover = MockProver::run(CHIP_SIZE, &circuit, vec![]).unwrap();
+        assert_eq!(prover.verify(), Ok(()));
+    }
 
-    //     // evaluate y for x in the interpolated polynomial
-    //     let exp = |x: usize, coeff: &Vec<Fp> | -> Fp {
-    //         let x = Fp::from(x as u64);
-    //         let mut y = Fp::zero();
-    //         for i in 0..coeff.len() {
-    //             let x_pow = x.clone().pow_vartime(&[i as u64]);
-    //             y = y + coeff[i].clone() * x_pow;
-    //         };
-    //         y
-    //     };
+    // fn invalid_placement_0() {
+    //     // check that a ship horizontally placed on multiple rows fails
+    //     // ex: [49, 50, 51, 52]
+    //     const SHIP_LENGTH: usize = 5;
+    //     let ship = ShipPlacement::<SHIP_LENGTH>::construct(5, 2, true);
+    //     let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
+    //     let prover = MockProver::run(CHIP_SIZE, &circuit, vec![]).unwrap();
+    //     assert_eq!(prover.verify(), Ok(()));
+    // }
 
-    //     println!("0: {:?}", exp(0, &coeff));
-    //     println!("1: {:?}", exp(1, &coeff));
-    //     println!("1: {:?}", exp(2, &coeff));
-    //     println!("2: {:?}", exp(3, &coeff));
-    //     println!("3: {:?}", exp(4, &coeff));
-    //     println!("4: {:?}", exp(5, &coeff));
-    //     println!("5: {:?}", exp(6, &coeff));
+    // fn invalid_placement_1() {
+    //     // check that a ship vertically placed on multiple rows fails
+    // }
 
+    // fn invalid_placement_2() {
 
     // }
 
-    // #[test]
-    // fn placement_invalid_case_0() {
-    //     // check that an invalid placement (attempts to assign less than necessary amount of bits)
-
-    // }
-
-    // #[test]
+    #[test]
     fn print_circuit() {
         use plotters::prelude::*;
         const SHIP_LENGTH: usize = 5;
@@ -185,7 +174,7 @@ mod test {
             .show_labels(false)
             // Render the circuit onto your area!
             // The first argument is the size parameter for the circuit.
-            .render(9, &circuit, &root)
+            .render(CHIP_SIZE, &circuit, &root)
             .unwrap();
     }
 }
