@@ -6,7 +6,10 @@ mod test {
                 chip::{PlacementChip, PlacementConfig},
                 gadget::{PlacementGadget, CHIP_SIZE},
             },
-            utils::ship::ShipPlacement,
+            utils::{
+                ship::{ShipPlacement, PlacementUtilities},
+                binary::bytes2bits
+            }
         },
         halo2_proofs::{
             arithmetic::FieldExt,
@@ -37,6 +40,7 @@ mod test {
 
         /**
          * Assign the horizontal and vertical placement values in the test circuit
+         * @dev either H or V will be set to 0
          *
          * @return - if successful, references to cell assignments for [horizontal, vertical]
          */
@@ -76,6 +80,7 @@ mod test {
                 },
             )?)
         }
+
     }
 
     impl<const S: usize> Circuit<Fp> for TestCircuit<S> {
@@ -194,12 +199,19 @@ mod test {
     #[test]
     fn invalid_placement_2() {
         // check that an attempt to assign both H and V fails
+        // const SHIP_LENGTH: usize = 4;
+        // let ship = ShipPlacement::<SHIP_LENGTH>::construct(9, 3, false);
+        // let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
+        // let prover = MockProver::run(CHIP_SIZE, &circuit, vec![]).unwrap();
+        // assert_eq!(
+        //     prover.verify(),
     }
 
     #[test]
     fn invalid_placement_3() {
         // check that a placement with not enough bits set fails
         // fails both bit_sum and full_window_sum
+        // check that a valid placement of battleship vertically at 5, 2 succeeds
     }
 
     #[test]

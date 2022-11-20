@@ -1,18 +1,7 @@
-use crate::utils::binary::{bits2num, unwrap_bitvec, bits_to_field_elements};
-use bitvec::prelude::*;
-use halo2_proofs::{
-    arithmetic::FieldExt,
-    circuit::AssignedCell,
+use {
+    bitvec::prelude::*,
+    crate::utils::binary::{bits2num, unwrap_bitvec}
 };
-
-// #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-// pub enum ShipType {
-//     Carrier,
-//     Battleship,
-//     Destroyer,
-//     Submarine,
-//     Cruiser,
-// }
 
 /**
  * Definition of a ship's placement on a board
@@ -24,8 +13,9 @@ pub struct ShipPlacement<const S: usize> {
     pub z: bool,
 }
 
-// Implementation of ship utility functions
-impl<const S: usize> ShipPlacement<S> {
+// definition of ship utility functions used in rational operation of circuit
+pub trait PlacementUtilities<const S: usize> {
+
     /**
      * Construct a new ShipData object according to a given spec
      * @dev - use ShipData::valid() to check whether a ship's placement is valid
@@ -36,9 +26,7 @@ impl<const S: usize> ShipPlacement<S> {
      * @param z - dictates whether ship extends from x, y horizontally or veritcally
      * @return - instantiated ShipData object containing input parameters for future use
      */
-    pub fn construct(x: u8, y: u8, z: bool) -> ShipPlacement<S> {
-        ShipPlacement { x, y, z }
-    }
+    fn construct(x: u8, y: u8, z: bool) -> ShipPlacement<S>;
 
     /**
      * Export the coordinates the ship is placed on as a vector
@@ -46,7 +34,39 @@ impl<const S: usize> ShipPlacement<S> {
      *     - ex: [x: 4, y: 7] - return: z = true { 74 } else { 47 }
      * @return - vector (of the length of the ship) of consecutive cells containing ship
      */
-    pub fn to_coordinates(self) -> [u8; S] {
+    fn to_coordinates(self) -> [u8; S];
+
+    /**
+     * Export the bitvec representation of the ship placement
+     * @notice bits ordered according to horizontal/ vertical orientation
+     *     - ex: [x: 1, y: 0, z: 0, l: 4] -> bits flipped @ [10, 20, 30, 40]
+     *     - ex: [x: 1, y: 0, z: 1, l: 4] -> bits flipped @ [10, 11, 12, 13]
+     * @return - 100 bit long array of ship arrangement
+     */
+    fn to_bits(self) -> BitVec<u8>;
+
+    /**
+     * Export the bitvec representation of the ship placement
+     *
+     * @param vertical - if true, export vertical orientation, else export horizontal
+     * @return - 128 bit integer encoded board (really 100 bits)
+     */
+    fn to_decimal(self) -> u128;
+
+    /**
+     * Render ASCII to the console representing the ship placement
+     */
+    fn print(self);
+}
+
+// Implementation of ship utility functions used in rational operation of circuit
+impl<const S: usize> PlacementUtilities<S> for ShipPlacement<S> {
+    
+    fn construct(x: u8, y: u8, z: bool) -> ShipPlacement<S> {
+        ShipPlacement { x, y, z }
+    }
+
+    fn to_coordinates(self) -> [u8; S] {
         let mut coordinates = vec![0u8; S];
         for i in 0..S {
             // compute cell
@@ -59,14 +79,7 @@ impl<const S: usize> ShipPlacement<S> {
         coordinates.try_into().unwrap()
     }
 
-    /**
-     * Export the bitvec representation of the ship placement
-     * @notice bits ordered according to horizontal/ vertical orientation
-     *     - ex: [x: 1, y: 0, z: 0, l: 4] -> bits flipped @ [10, 20, 30, 40]
-     *     - ex: [x: 1, y: 0, z: 1, l: 4] -> bits flipped @ [10, 11, 12, 13]
-     * @return - 100 bit long array of ship arrangement
-     */
-    pub fn to_bits(self) -> BitVec<u8> {
+    fn to_bits(self) -> BitVec<u8> {
         let coordinates = self.to_coordinates();
         let mut board = 0u128.to_le_bytes().view_bits::<Lsb0>()[..100].to_bitvec();
         for coordinate in coordinates {
@@ -76,32 +89,13 @@ impl<const S: usize> ShipPlacement<S> {
         board
     }
 
-    // /**
-    //  * Export array of bits (as shown in bitvec version) instantiated as field elements
-    //  * @return - 100 bit long array of ship arrangement
-    //  */
-    // pub fn to_bits_f<F: FieldExt>(self) -> [AssignedCell<F, F>; 100] {
-    //     self.to_bits()
-    //         .iter().map(|bit| )
-
-    // }
-
-    /**
-     * Export the bitvec representation of the ship placement
-     *
-     * @param vertical - if true, export vertical orientation, else export horizontal
-     * @return - 128 bit integer encoded board (really 100 bits)
-     */
-    pub fn to_decimal(self) -> u128 {
+    fn to_decimal(self) -> u128 {
         let mut bits = self.to_bits();
         bits.reverse(); // @dev poor understanding of endianness :,(
         bits2num(&bits)
     }
 
-    /**
-     * Render ASCII to the console representing the ship placement
-     */
-    pub fn print(self) {
+    fn print(self) {
         const BOARD_SIZE: usize = 100;
         let bits = unwrap_bitvec::<BOARD_SIZE>(self.to_bits());
         let mut lines = Vec::<String>::new();
@@ -128,19 +122,47 @@ impl<const S: usize> ShipPlacement<S> {
     }
 }
 
+// definition of ship test functionsused in malicious operation of circuit
+pub trait TestUtilities<const S: usize> {
 
-#[cfg(test)]
-pub mod tests {
-    use super::*;
+    /**
+     * Add horizontal and vertical commitments together. return [H, V, Sum(H, V)]
+     * 
+     * @return - array of [H, V, Sum(H, V)]
+     */
+    fn transposed_to_decimal(self) -> [u128; 3];
 
-    #[test]
-    fn t0_general_use() {
-        let ship = ShipPlacement::<5>::construct(3, 3, false);
+    /**
+     * Returns a bitvec decomposition of Sum(H, V)
+     */
+    fn transposed_to_bits(self) -> BitVec<u8>;
+    
+}
+
+// Implementation of ship test functionsused in malicious operation of circuit
+impl<const S: usize> TestUtilities<S> for ShipPlacement<S> {
+
+    /**
+     * Returns a bitvec decomposition of Sum(H, V)
+     */
+    fn transposed_to_bits(self) -> BitVec<u8> {
+        let decimal = self.transposed_to_decimal();
+        decimal[2].to_le_bytes().view_bits::<Lsb0>().to_owned()
     }
 
-    #[test]
-    fn t1_validity() {}
+    /**
+     * Add horizontal and vertical commitments together. return [H, V, Sum(H, V)]
+     * 
+     * @return - array of [H, V, Sum(H, V)]
+     */
+    fn transposed_to_decimal(self) -> [u128; 3] {
+        let horizontal = ShipPlacement::<S>::construct(self.x, self.y, false).to_decimal();
+        let vertical = ShipPlacement::<S>::construct(self.x, self.y, true).to_decimal();
+        let sum = horizontal + vertical;
+        vec![horizontal, vertical, sum].try_into().unwrap()
+    }
 
-    #[test]
-    fn t2_export_coordinates() {}
+   
+
 }
+

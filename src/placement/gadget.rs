@@ -3,7 +3,7 @@ use {
         placement::chip::PlacementConfig,
         utils::{
             binary::{bits_to_field_elements, unwrap_bitvec},
-            ship::ShipPlacement,
+            ship::{ShipPlacement, PlacementUtilities}
         },
     },
     halo2_proofs::{

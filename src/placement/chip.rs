@@ -6,7 +6,7 @@ use {
         placement::gadget::{InstructionUtilities, PlacementBits, PlacementState, BOARD_SIZE},
         utils::{
             binary::{bits_to_field_elements, unwrap_bitvec},
-            ship::ShipPlacement,
+            ship::{ShipPlacement, PlacementUtilities}
         },
     },
     halo2_proofs::{

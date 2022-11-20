@@ -141,7 +141,7 @@ mod test {
 
     use crate::utils::{
         binary::{bits_to_field_elements, bytes2bits, unwrap_bitarr, unwrap_bitvec},
-        ship::ShipPlacement,
+        ship::{PlacementUtilities, ShipPlacement},
     };
 
     #[derive(Clone)]
@@ -286,28 +286,30 @@ mod test {
         let k = 9;
         let prover = MockProver::run(k, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
-        
+
         // check that value fails if decimal is incremented
         let decimal = ship.to_decimal() + 1u128;
         let circuit = TestCircuit::<BOARD_SIZE>::new(Fp::from_u128(decimal), bits);
         let prover = MockProver::run(k, &circuit, vec![]).unwrap();
         assert_eq!(
             prover.verify(),
-            Err(vec![VerifyFailure::Permutation {
-                column: metadata::Column::from((Any::Advice, 1)),
-                location: FailureLocation::InRegion {
-                    region: (1, "bits2num").into(),
-                    offset: 100
+            Err(vec![
+                VerifyFailure::Permutation {
+                    column: metadata::Column::from((Any::Advice, 1)),
+                    location: FailureLocation::InRegion {
+                        region: (1, "bits2num").into(),
+                        offset: 100
+                    }
+                },
+                VerifyFailure::Permutation {
+                    column: metadata::Column::from((Any::Advice, 3)),
+                    location: FailureLocation::InRegion {
+                        region: (0, "trace").into(),
+                        offset: 0
+                    }
                 }
-            }, VerifyFailure::Permutation {
-                column: metadata::Column::from((Any::Advice, 3)),
-                location: FailureLocation::InRegion {
-                    region: (0, "trace").into(),
-                    offset: 0
-                }
-            }
             ])
-        );
+        )
     }
 
     #[test]
