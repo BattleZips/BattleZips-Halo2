@@ -197,7 +197,7 @@ impl<F: FieldExt> InstructionUtilities<F> for PlacementState<F> {
         config.selectors[2].enable(region, 1)?;
         // iterate through trace
         // for offset in 2..=BOARD_SIZE {
-        for offset in 2..=100{
+        for offset in 2..=BOARD_SIZE{
             let adjusted_offset = offset - 1; // offset by 1 extra for padding row
 
             // assign trace
@@ -215,7 +215,7 @@ impl<F: FieldExt> InstructionUtilities<F> for PlacementState<F> {
             )?;
             // toggle selectors
             config.selectors[1].enable(region, offset)?;
-            if offset % 10 + S >= 10 {
+            if adjusted_offset % 10 + S >= 10 {
                 config.selectors[3].enable(region, offset)?;
             } else {
                 config.selectors[2].enable(region, offset)?;
