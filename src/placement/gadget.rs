@@ -188,26 +188,38 @@ impl<F: FieldExt> InstructionUtilities<F> for PlacementState<F> {
             || Value::known(gadget.bit_sum[0]),
         )?;
         let mut full_window_sum_cell = region.assign_advice(
-            || format!("assign running sum (bit count) {}", 0),
+            || format!("assign running sum (full window count) {}", 0),
             config.advice[2],
             1, // offset by 1 extra for padding row
-            || Value::known(gadget.bit_sum[0]),
+            || Value::known(gadget.full_window_sum[0]),
         )?;
-
+        config.selectors[1].enable(region, 1)?;
+        config.selectors[2].enable(region, 1)?;
         // iterate through trace
-        for offset in 2..=BOARD_SIZE {
+        // for offset in 2..=BOARD_SIZE {
+        for offset in 2..=100{
+            let adjusted_offset = offset - 1; // offset by 1 extra for padding row
+
+            // assign trace
             bit_sum_cell = region.assign_advice(
-                || format!("assign running sum (bit count) {}", offset),
+                || format!("assign running sum (bit count) {}", adjusted_offset),
                 config.advice[1],
-                offset + 1, // offset by 1 extra for padding row
-                || Value::known(gadget.bit_sum[offset]),
+                offset, 
+                || Value::known(gadget.bit_sum[adjusted_offset]),
             )?;
             full_window_sum_cell = region.assign_advice(
-                || format!("assign running sum (bit count) {}", offset),
+                || format!("assign running sum (full window count) {}", adjusted_offset),
                 config.advice[2],
-                offset + 1, // offset by 1 extra for padding row
-                || Value::known(gadget.bit_sum[offset]),
+                offset, // offset by 1 extra for padding row
+                || Value::known(gadget.full_window_sum[adjusted_offset]),
             )?;
+            // toggle selectors
+            config.selectors[1].enable(region, offset)?;
+            if offset % 10 + S >= 10 {
+                config.selectors[3].enable(region, offset)?;
+            } else {
+                config.selectors[2].enable(region, offset)?;
+            }
         }
         Ok(PlacementState {
             bit_sum: bit_sum_cell,
@@ -222,7 +234,7 @@ impl<F: FieldExt> InstructionUtilities<F> for PlacementState<F> {
 #[derive(Clone, Copy, Debug)]
 pub struct PlacementGadget<F: FieldExt, const S: usize> {
     pub ship: ShipPlacement<S>, // object constructed from (x, y, z, len) to use ship
-    pub bits: [F; S],           // little endian decomposition of placement commitment
+    pub bits: [F; BOARD_SIZE],           // little endian decomposition of placement commitment
     pub bit_sum: [F; BOARD_SIZE], // running sum of total flipped bits in `bits` array
     pub full_window_sum: [F; BOARD_SIZE], // running sum of total full bit windows of len `S`
 }
@@ -236,8 +248,7 @@ impl<F: FieldExt, const S: usize> PlacementGadget<F, S> {
      */
     pub fn new(ship: ShipPlacement<S>) -> Self {
         // encode ship placement for arithemtization
-        let bits = bits_to_field_elements::<F, S>(unwrap_bitvec(ship.to_bits()));
-
+        let bits = bits_to_field_elements::<F, BOARD_SIZE>(unwrap_bitvec(ship.to_bits()));
         // compute bit_sum trace
         let mut trace: Vec<F> = Vec::<F>::new();
         trace.push(bits[0]);
@@ -246,26 +257,39 @@ impl<F: FieldExt, const S: usize> PlacementGadget<F, S> {
         }
         let bit_sum: [F; BOARD_SIZE] = trace.try_into().unwrap();
 
+        // function for returning increment
+        // expects permute case check to be done lower in stack
+        let increment = |offset: usize| {
+            let bit_count = bits[offset..offset + S]
+                .iter()
+                .fold(F::zero(), |sum: F, elem: &F| sum + elem);
+            let v = if bit_count.eq(&F::from(S as u64)) {
+                F::one()
+            } else {
+                F::zero()
+            };
+            v
+        };
+        
         // compute full bit window trace
-        trace = Vec::<F>::new();
-        for i in 0..bits.len() {
+        trace = vec![increment(0)];
+        for i in 1..bits.len() {
             if i % 10 + S >= 10 {
                 // permute case
                 trace.push(trace[i - 1]);
             } else {
                 // bit window check case
-                let bit_count = bits[i..i + S]
-                    .iter()
-                    .fold(F::zero(), |sum: F, elem: &F| sum + elem);
-                let increment = if bit_count.eq(&F::from(S as u64)) {
-                    F::one()
-                } else {
-                    F::zero()
-                };
-                trace.push(trace[i - 1] + increment)
+                trace.push(trace[i - 1] + increment(i))
             }
         }
         let full_window_sum: [F; BOARD_SIZE] = trace.try_into().unwrap();
+        
+        // //print
+        // for i in 0..BOARD_SIZE {
+        //     println!("=-=-=-=-=-=\nbit #{}: {:?}", i, bits[i]);
+        //     println!("bit_sum: {:?}", bit_sum[i]);
+        //     println!("full_window_sum: {:?}", full_window_sum[i]);
+        // }
 
         // return object
         PlacementGadget {

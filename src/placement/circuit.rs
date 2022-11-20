@@ -1,547 +1,194 @@
-// use {
-//     std::marker::PhantomData,
-//     halo2_proofs::{
-//         arithmetic::FieldExt,
-//         circuit::{AssignedCell, Chip, Layouter, Region, Value},
-//         plonk::{
-//             Advice, Column, ConstraintSystem, Constraints, Error, Expression,
-//             Selector,
-//         },
-//         poly::Rotation,
-//     },
-//     crate::{
-//         placement::gadget::BOARD_SIZE,
-//         bits2num::bits2num::{Bits2NumChip, Bits2NumConfig},
-//         utils::{
-//             binary::{bits_to_field_elements, unwrap_bitvec},
-//             ship::ShipPlacement,
-//         },
-//     }
-// };
+#[cfg(test)]
+mod test {
+    use halo2_proofs::arithmetic::Field;
 
-// /**
-//  * Storage required to use a ship placement validity chip
-//  *
-//  * @param bits2num - the Bits2NumConfig struct holding columns & data needed to compose bits into a decimal value
-//  * @param advice - array of 3 columns used to compute board validity
-//  *     * rows 0-99 perform running sum operations on bits. last row constrains output
-//  * @param q_binary_row - toggle to sum bits, count adjacency, etc.
-//  * @param q_constrain_placement - toggle to constrain output to be valid
-//  * @param ship - Object storing/ exporting ship positioning
-//  */
-// #[derive(Clone, Copy, Debug)]
-// pub struct PlacementConfig<F: FieldExt, const S: usize> {
-//     pub bits2num: Bits2NumConfig,
-//     pub advice: [Column<Advice>; 3],
-//     pub selectors: [Selector; 5],
-//     _marker: PhantomData<F>,
-// }
 
-// pub struct PlacementChip<F: FieldExt, const S: usize> {
-//     config: PlacementConfig<F, S>,
-//     ship: ShipPlacement<S>,
-// }
+    use {
+        halo2_proofs::{
+            arithmetic::{FieldExt, lagrange_interpolate},
+            circuit::{Layouter, AssignedCell, Value, SimpleFloorPlanner},
+            dev::{CircuitLayout, MockProver},
+            pasta:: Fp,
+            plonk::{Circuit, Column, Advice, Error, ConstraintSystem}
+        },
+        crate::{
+            placement::{
+                chip::{PlacementChip, PlacementConfig},
+                gadget::{PlacementGadget}
+            },
+            utils::ship::ShipPlacement
+        }
+    };
 
-// impl<F: FieldExt, const S: usize> Chip<F> for PlacementChip<F, S> {
-//     type Config = PlacementConfig<F, S>;
-//     type Loaded = ();
+    #[derive(Debug, Clone, Copy)]
+    struct TestConfig<const S: usize> {
+        pub placement_config: PlacementConfig<Fp, S>,
+        pub trace: Column<Advice>,
+    }
 
-//     fn config(&self) -> &Self::Config {
-//         &self.config
-//     }
+    #[derive(Debug, Clone, Copy)]
+    struct TestCircuit<const S: usize> {
+        pub ship: ShipPlacement<S>,
+        pub gadget: PlacementGadget<Fp, S>
+    }
 
-//     fn loaded(&self) -> &Self::Loaded {
-//         &()
-//     }
-// }
-// pub trait PlacementInstructions<F: FieldExt, const S: usize> {
-//     /*
-//      * Loads decimal encoding of horizontal placement, vertical placement, and sum of the two
-//      * @dev constrains horizontal and vertical to be equal from other region
-//      *
-//      * @return - reference to assigned cells on which further constraints are performed
-//      */
-//     fn load_placement(
-//         &self,
-//         layouter: &mut impl Layouter<F>,
-//         horizontal: AssignedCell<F, F>,
-//         vertical: AssignedCell<F, F>,
-//     ) -> Result<[AssignedCell<F, F>; 3], Error>;
+    impl<const S: usize> TestCircuit<S> {
+        fn new(ship: ShipPlacement<S>) -> TestCircuit<S> {
+            let gadget = PlacementGadget::<Fp, S>::new(ship);
+            TestCircuit { ship, gadget }
+        }
 
-//     /**
-//      * Generate a bits2num region and constrain it to equal a given assigned cell
-//      *
-//      * @param value - assigned call that bits2num should compose to (SUM(H, V))
-//      * @return - array of 100 assigned cells representing bits
-//      */
-//     fn synth_bits2num(
-//         &self,
-//         layouter: &mut impl Layouter<F>,
-//         value: AssignedCell<F, F>,
-//     ) -> Result<BoardState<F>, Error>;
+        /**
+         * Assign the horizontal and vertical placement values in the test circuit
+         *
+         * @return - if successful, references to cell assignments for [horizontal, vertical]
+         */
+        fn witness_trace(
+            &self,
+            layouter: &mut impl Layouter<Fp>,
+            config: TestConfig<S>,
+        ) -> Result<[AssignedCell<Fp, Fp>; 2], Error> {
+            Ok(layouter.assign_region(
+                || "placement ship test trace",
+                |mut region| {
+                    // compute horizontal and vertical values
+                    let decimal = self.ship.to_decimal();
+                    let horizontal = if self.ship.z {
+                        Value::known(Fp::zero())
+                    } else {
+                        Value::known(Fp::from_u128(decimal))
+                    };
+                    let vertical = if self.ship.z {
+                        Value::known(Fp::from_u128(decimal))
+                    } else {
+                        Value::known(Fp::zero())
+                    };
+                    let horizontal_cell = region.assign_advice(
+                        || "assign horizontal to test trace",
+                        config.trace,
+                        0,
+                        || horizontal,
+                    )?;
+                    let vertical_cell = region.assign_advice(
+                        || "assign vertical to test trace",
+                        config.trace,
+                        1,
+                        || vertical,
+                    )?;
+                    Ok([horizontal_cell, vertical_cell])
+                },
+            )?)
+        }
+    }
 
-//     /**
-//      * Generate the running sum for bit counts and full bit windows
-//      *
-//      * @param bits - 100 assigned bits to permute into this region
-//      * @return - reference to final assignments for running bit sums and full bit window sums
-//      */
-//     fn placement_sums(
-//         &self,
-//         layouter: &mut impl Layouter<F>,
-//         bits: BoardState<F>,
-//     ) -> Result<PlacementState<F>, Error>;
+    impl<const S: usize> Circuit<Fp> for TestCircuit<S> {
+        type Config = TestConfig<S>;
+        type FloorPlanner = SimpleFloorPlanner;
 
-//     /**
-//      * Constrain the witnessed running sum values for placement to be valid under game logic
-//      *
-//      * @param board_values - [horizontal, vertical] assignments
-//      * @param state - reference to assigned bit count and full bit window count cells
-//      */
-//     fn assign_constraint(
-//         &self,
-//         layouter: &mut impl Layouter<F>,
-//         state: PlacementState<F>,
-//     ) -> Result<(), Error>;
-// }
+        fn without_witnesses(&self) -> Self {
+            self.clone()
+        }
 
-// impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
-//     pub fn new(config: PlacementConfig<F, S>, ship: ShipPlacement<S>) -> Self {
-//         PlacementChip { config, ship }
-//     }
+        fn configure(meta: &mut ConstraintSystem<Fp>) -> TestConfig<S> {
+            let placement_config = PlacementChip::<Fp, S>::configure(meta);
+            let trace = meta.advice_column();
+            meta.enable_equality(trace);
 
-//     /**
-//      * Configure the computation space of the circuit & return PlacementConfig
-//      */
-//     pub fn configure(meta: &mut ConstraintSystem<F>) -> PlacementConfig<F, S> {
-//         // define advice columns
-//         let mut advice = Vec::<Column<Advice>>::new();
-//         for _ in 0..3 {
-//             let col = meta.advice_column();
-//             meta.enable_equality(col);
-//             advice.push(col);
-//         }
-//         let advice: [Column<Advice>; 3] = advice.try_into().unwrap();
-//         // allocate fixed column for constants
-//         let fixed = meta.fixed_column();
-//         meta.enable_equality(fixed);
+            TestConfig {
+                placement_config,
+                trace,
+            }
+        }
 
-//         // bits2num region: advice[0]: bits; advice[1]: lc1; advice[2]: e2
-//         // placement input region: advice[0]: bits; advice[1]: bit count running sum; advice[2]: full bit window running sum
-//         // placement running sum region: advice[0]: sum; advice[1]: horizontal decimal; advice[2]: vertical decimal
+        fn synthesize(
+            &self,
+            config: TestConfig<S>,
+            mut layouter: impl Layouter<Fp>,
+        ) -> Result<(), Error> {
+            // assign test trace
+            let commitments = self.witness_trace(&mut layouter, config)?;
+            let chip = PlacementChip::<Fp, S>::new(config.placement_config, self.ship);
+            _ = chip.synthesize(layouter, commitments[0].clone(), commitments[1].clone(), self.gadget);
+            Ok(())
+        }
+    }
 
-//         // define bits2num config
-//         let bits2num = Bits2NumChip::<_, BOARD_SIZE>::configure(meta);
+    #[test]
+    fn placement_valid_case_0() {
+        // check that a valid placement of carrier horizontally at 0, 0 succeeds
+        const SHIP_LENGTH: usize = 5;
+        let ship = ShipPlacement::<SHIP_LENGTH>::construct(0, 0, false);
+        let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
+        let k = 8;
+        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
+        assert_eq!(prover.verify(), Ok(()));
+    }
 
-//         // define selectors
-//         let q_placement_orientation = meta.selector();
-//         let q_bit_sum = meta.selector();
-//         let q_bit_adjacency = meta.selector();
-//         let q_adjacency_permute = meta.selector();
-//         let q_constrain_placement = meta.selector();
+    // #[test]
+    // fn inverse_test() {
+    //     let ship_len = Fp::from(5);
+    //     let count = Fp::from(4);
+    //     let inv = ship_len.invert().unwrap_or(Fp::zero());
+    //     ship_len.is_zero();
+    //     let exp = count * inv;
+    //     println!("inv: {:?}", exp);
+    //     let points = [Fp::from(0), Fp::from(1), Fp::from(2), Fp::from(3), Fp::from(4), Fp::from(5)];
+    //     let evals = [Fp::from(0), Fp::from(0), Fp::from(0), Fp::from(0), Fp::from(0), Fp::from(1)];
+    //     let coeff = lagrange_interpolate(&points, &evals);
 
-//         meta.create_gate("horizontal/ vertical placement constraint", |meta| {
-//             // retrieve witnessed cells
-//             let sum = meta.query_advice(advice[0], Rotation::cur());
-//             let horizontal = meta.query_advice(advice[1], Rotation::cur());
-//             let vertical = meta.query_advice(advice[2], Rotation::cur());
-//             // constain either horizontal or vertical placement to be 0
-//             let either_zero = horizontal.clone() * vertical.clone();
-//             // constrain sum == horizontal + vertical
-//             // toggled by q_placement_orientation
-//             let summed = sum - (horizontal.clone() + vertical.clone());
-//             let selector = meta.query_selector(q_placement_orientation);
-//             Constraints::with_selector(
-//                 selector,
-//                 [("Either h or v == 0", either_zero), ("h + v = sum", summed)],
-//             )
-//         });
+    //     // evaluate y for x in the interpolated polynomial
+    //     let exp = |x: usize, coeff: &Vec<Fp> | -> Fp {
+    //         let x = Fp::from(x as u64);
+    //         let mut y = Fp::zero();
+    //         for i in 0..coeff.len() {
+    //             let x_pow = x.clone().pow_vartime(&[i as u64]);
+    //             y = y + coeff[i].clone() * x_pow;
+    //         };
+    //         y
+    //     };
 
-//         // define gates
-//         meta.create_gate("placement bit count", |meta| {
-//             // check that this row's bit count is sum of prev row's bit count + current row's bit value
-//             let bit = meta.query_advice(advice[0], Rotation::cur());
-//             // store running bit sum in advice[0]
-//             let prev = meta.query_advice(advice[1], Rotation::prev());
-//             let sum = meta.query_advice(advice[1], Rotation::cur());
-//             // return constraint:
-//             // - toggled by q_bit_sum
-//             // - constrain sum to be equal to bit + prev
-//             let selector = meta.query_selector(q_bit_sum);
-//             Constraints::with_selector(selector, [("Running Sum: Bits", bit + prev - sum)])
-//         });
+    //     println!("0: {:?}", exp(0, &coeff));
+    //     println!("1: {:?}", exp(1, &coeff));
+    //     println!("1: {:?}", exp(2, &coeff));
+    //     println!("2: {:?}", exp(3, &coeff));
+    //     println!("3: {:?}", exp(4, &coeff));
+    //     println!("4: {:?}", exp(5, &coeff));
+    //     println!("5: {:?}", exp(6, &coeff));
 
-//         meta.create_gate("adjacenct bit count", |meta| {
-//             // count the number of bits in this gate and the proceeding `S` rows in bit column (A^2)
-//             let mut bit_count = meta.query_advice(advice[0], Rotation::cur());
-//             for i in 1..S {
-//                 let bit = meta.query_advice(advice[0], Rotation(i as i32));
-//                 bit_count = bit_count + bit;
-//             }
-//             // query full bit window running sum at column (A^4)
-//             let prev_running_sum = meta.query_advice(advice[2], Rotation::prev());
-//             let running_sum = meta.query_advice(advice[2], Rotation::cur());
-//             // constant expressions
-//             let ship_len = Expression::Constant(F::from(S as u64));
-//             let one = Expression::Constant(F::one());
 
-//             /*
-//              * Constrain the expected value for the full bit window running sum
-//              *
-//              * @param count - the sum of all flipped bits in the window being queried
-//              * @param prev - the previous running sum of all bit windows of length ship_len that were full
-//              * @param sum - current running sum of all bit windows of length ship_len that are full
-//              * @return 0 if [count != ship_len && prev == sum] or [count == ship_len && prev + 1 = sum ]
-//              */
-//             let running_sum_exp =
-//                 |count: Expression<F>, prev: Expression<F>, sum: Expression<F>| {
-//                     // variable expressions
-//                     let increment_case = prev.clone() + one.clone() - sum.clone();
-//                     let equal_case = prev.clone() - sum.clone();
-//                     let condition = one.clone() - one.clone() * (ship_len.clone() - count.clone());
-//                     // return expected constraint equation
-//                     condition.clone() * increment_case.clone()
-//                         + (one.clone() - condition.clone()) * equal_case.clone()
-//                 };
+    // }
 
-//             // return constraint:
-//             // bit_count = bit_count
-//             // - if bit_count == ship_len, running_sum = prev_running_sum + 1
-//             // - if bit_count != ship_len, running_sum = prev_running
-//             let selector = meta.query_selector(q_bit_adjacency);
-//             Constraints::with_selector(
-//                 selector,
-//                 [(
-//                     "Full Window Running Sum",
-//                     running_sum_exp(
-//                         bit_count.clone(),
-//                         prev_running_sum.clone(),
-//                         running_sum.clone(),
-//                     ),
-//                 )],
-//             )
-//         });
+    // #[test]
+    // fn placement_invalid_case_0() {
+    //     // check that an invalid placement (attempts to assign less than necessary amount of bits)
 
-//         meta.create_gate("permute adjacent bit count", |meta| {
-//             // confirm that the current row's adjacent bit count is the same as the previous rows
-//             // @dev used in rows where ship cannot be placed (offset % 10 + ship_length >= 10)
-//             // store running adjacency count in advice[2]
-//             let previous = meta.query_advice(advice[2], Rotation::prev());
-//             let current = meta.query_advice(advice[2], Rotation::cur());
-//             // return constraint
-//             // - toggled by q_adjacency_permute
-//             // - constrain previous to equal current
-//             let selector = meta.query_selector(q_adjacency_permute);
-//             Constraints::with_selector(
-//                 selector,
-//                 [("Premute Full Window Running Sum", previous - current)],
-//             )
-//         });
+    // }
 
-//         meta.create_gate("running sum constraints", |meta| {
-//             // confirm the final output of the placement computation does not violate ship placement rules
-//             // @dev constraining of sum(h,v) to bits2num output occurs in synthesis
-//             let ship_len = Expression::Constant(F::from(S as u64));
-//             let one = Expression::Constant(F::one());
-//             let bit_count = meta.query_advice(advice[1], Rotation::cur());
-//             let full_window_count = meta.query_advice(advice[2], Rotation::cur());
-//             // return constraint
-//             // - toggled by q_constrain_placement
-//             // - constrain bit count to be equal to S
-//             // - constrain exactly one full bit window
-//             let selector = meta.query_selector(q_constrain_placement);
-//             Constraints::with_selector(
-//                 selector,
-//                 [
-//                     ("Placed ship of correct length", bit_count - ship_len),
-//                     ("One full bit window", full_window_count - one),
-//                 ],
-//             )
-//         });
+    // #[test]
+    fn print_circuit() {
+        use plotters::prelude::*;
+        const SHIP_LENGTH: usize = 5;
+        let ship = ShipPlacement::<SHIP_LENGTH>::construct(0, 0, false);
+        let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
+        let root = BitMapBackend::new("src/placement/placement_layout.png", (1024, 768))
+            .into_drawing_area();
+        root.fill(&WHITE).unwrap();
+        let root = root
+            .titled("Placement Circuit Layout", ("sans-serif", 60))
+            .unwrap();
 
-//         // export config
-//         PlacementConfig {
-//             bits2num,
-//             advice,
-//             q_placement_orientation,
-//             q_bit_sum,
-//             q_bit_adjacency,
-//             q_adjacency_permute,
-//             q_constrain_placement,
-//             _marker: PhantomData,
-//         }
-//     }
-
-//     pub fn synthesize(
-//         &self,
-//         mut layouter: impl Layouter<F>,
-//         horizontal: AssignedCell<F, F>,
-//         vertical: AssignedCell<F, F>,
-//     ) -> Result<(), Error> {
-//         let placement_commitments = self.load_placement(&mut layouter, horizontal, vertical)?;
-//         // println!("commitment: {:?}", placement_commitments[0].clone());
-//         let bits = self.synth_bits2num(&mut layouter, placement_commitments[0].clone())?;
-//         let running_sums = self.placement_sums(&mut layouter, bits)?;
-//         // self.assign_constraint(&mut layouter, running_sums)?;
-//         Ok(())
-//     }
-// }
-
-// impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<F, S> {
-//     fn load_placement(
-//         &self,
-//         layouter: &mut impl Layouter<F>,
-//         horizontal: AssignedCell<F, F>,
-//         vertical: AssignedCell<F, F>,
-//     ) -> Result<[AssignedCell<F, F>; 3], Error> {
-//         // variables used to construct witness
-
-//         let sum = horizontal.value().copied() + vertical.value().copied();
-//         // storage variable for assigned cell holding sum(h, v) to be constrained to bits2num
-//         let assigned: [AssignedCell<F, F>; 3] = layouter.assign_region(
-//             || "load placement encoded values",
-//             |mut region: Region<F>| {
-//                 _ = self.config.q_placement_orientation.enable(&mut region, 0);
-//                 let sum = region.assign_advice(
-//                     || "sum of h & v placements",
-//                     self.config.advice[0],
-//                     0,
-//                     || sum,
-//                 )?;
-//                 let horizontal_cell = horizontal.copy_advice(
-//                     || "permute horizontal placement",
-//                     &mut region,
-//                     self.config.advice[1],
-//                     0,
-//                 )?;
-//                 let vertical_cell = vertical.copy_advice(
-//                     || "permute horizontal placement",
-//                     &mut region,
-//                     self.config.advice[2],
-//                     0,
-//                 )?;
-//                 Ok([sum, horizontal_cell.clone(), vertical_cell.clone()])
-//             },
-//         )?;
-//         Ok(assigned)
-//     }
-
-//     fn synth_bits2num(
-//         &self,
-//         layouter: &mut impl Layouter<F>,
-//         value: AssignedCell<F, F>,
-//     ) -> Result<BoardState<F>, Error> {
-//         let bits: [F; BOARD_SIZE] =
-//             bits_to_field_elements::<F, BOARD_SIZE>(unwrap_bitvec(self.ship.to_bits()));
-//         let bits2num = Bits2NumChip::<F, BOARD_SIZE>::new(value, bits);
-//         let assigned_bits =
-//             bits2num.synthesize(self.config.bits2num, layouter.namespace(|| "bits2num"))?;
-//         Ok(BoardState::<F>::from(assigned_bits))
-//     }
-
-//     fn placement_sums(
-//         &self,
-//         layouter: &mut impl Layouter<F>,
-//         bits2num: BoardState<F>,
-//     ) -> Result<PlacementState<F>, Error> {
-//         Ok(layouter.assign_region(
-//             || "placement running sum trace",
-//             |mut region: Region<F>| {
-//                 // pad first row with 0's to prevent running sums'
-//                 // Rotation::prev() from unintended consequences
-//                 let mut state = PlacementState::<F>::assign_padding_row(&mut region, &self.config)?;
-//                 // permute bits constrained in "load placement encoded values" region to this region
-//                 let bits = state.permute_bits2num(&bits2num, &mut region, &self.config)?;
-//                 // // assign running sum trace across 100 (BOARD_SIZE) rows
-//                 let window_condition = |offset: usize| (offset - 1) % 10 + S < 10;
-//                 for i in 1..=6 {
-//                     println!("Window Condition: {}", window_condition(i));
-//                     if window_condition(i) {
-//                         // assign row that can increment full bit window running sum
-//                         state =
-//                             state.assign_window_row::<S>(&bits, &mut region, &self.config, i)?;
-//                     } else {
-//                         // assign row that can only increment total bit sum
-//                         state =
-//                             state.assign_permute_row::<S>(&bits, &mut region, &self.config, i)?;
-//                     }
-//                 }
-//                 Ok(state)
-//             },
-//         )?)
-//     }
-
-//     fn assign_constraint(
-//         &self,
-//         layouter: &mut impl Layouter<F>,
-//         state: PlacementState<F>,
-//     ) -> Result<(), Error> {
-//         Ok(layouter.assign_region(
-//             || "constrain running sum output",
-//             |mut region: Region<F>| {
-//                 state.bit_sum.copy_advice(
-//                     || "copy bit sum total count to constraint region",
-//                     &mut region,
-//                     self.config.advice[1],
-//                     0,
-//                 )?;
-//                 state.full_window_sum.copy_advice(
-//                     || "copy full bit window total count to constaint region",
-//                     &mut region,
-//                     self.config.advice[1],
-//                     0,
-//                 )?;
-//                 self.config.q_constrain_placement.enable(&mut region, 0)?;
-//                 Ok(())
-//             },
-//         )?)
-//     }
-// }
-
-// #[cfg(test)]
-// mod test {
-//     use super::*;
-
-//     use halo2_proofs::{
-//         circuit::SimpleFloorPlanner,
-//         dev::{CircuitLayout, MockProver},
-//         pasta::{group::ff::PrimeFieldBits, Fp},
-//         plonk::Circuit,
-//     };
-
-//     #[derive(Debug, Clone, Copy)]
-//     struct TestConfig<const S: usize> {
-//         pub placement_config: PlacementConfig<Fp, S>,
-//         pub trace: Column<Advice>,
-//     }
-
-//     #[derive(Debug, Clone, Copy)]
-//     struct TestCircuit<const S: usize> {
-//         pub ship: ShipPlacement<S>,
-//     }
-
-//     impl<const S: usize> TestCircuit<S> {
-//         fn new(ship: ShipPlacement<S>) -> TestCircuit<S> {
-//             TestCircuit { ship }
-//         }
-
-//         /**
-//          * Assign the horizontal and vertical placement values in the test circuit
-//          *
-//          * @return - if successful, references to cell assignments for [horizontal, vertical]
-//          */
-//         fn witness_trace(
-//             &self,
-//             layouter: &mut impl Layouter<Fp>,
-//             config: TestConfig<S>,
-//         ) -> Result<[AssignedCell<Fp, Fp>; 2], Error> {
-//             Ok(layouter.assign_region(
-//                 || "placement ship test trace",
-//                 |mut region| {
-//                     // compute horizontal and vertical values
-//                     let decimal = self.ship.to_decimal();
-//                     let horizontal = if self.ship.z {
-//                         Value::known(Fp::zero())
-//                     } else {
-//                         Value::known(Fp::from_u128(decimal))
-//                     };
-//                     let vertical = if self.ship.z {
-//                         Value::known(Fp::from_u128(decimal))
-//                     } else {
-//                         Value::known(Fp::zero())
-//                     };
-//                     let horizontal_cell = region.assign_advice(
-//                         || "assign horizontal to test trace",
-//                         config.trace,
-//                         0,
-//                         || horizontal,
-//                     )?;
-//                     let vertical_cell = region.assign_advice(
-//                         || "assign vertical to test trace",
-//                         config.trace,
-//                         1,
-//                         || vertical,
-//                     )?;
-//                     Ok([horizontal_cell, vertical_cell])
-//                 },
-//             )?)
-//         }
-//     }
-
-//     impl<const S: usize> Circuit<Fp> for TestCircuit<S> {
-//         type Config = TestConfig<S>;
-//         type FloorPlanner = SimpleFloorPlanner;
-
-//         fn without_witnesses(&self) -> Self {
-//             self.clone()
-//         }
-
-//         fn configure(meta: &mut ConstraintSystem<Fp>) -> TestConfig<S> {
-//             let placement_config = PlacementChip::<Fp, S>::configure(meta);
-//             let trace = meta.advice_column();
-//             meta.enable_equality(trace);
-
-//             TestConfig {
-//                 placement_config,
-//                 trace,
-//             }
-//         }
-
-//         fn synthesize(
-//             &self,
-//             config: TestConfig<S>,
-//             mut layouter: impl Layouter<Fp>,
-//         ) -> Result<(), Error> {
-//             // assign test trace
-//             let commitments = self.witness_trace(&mut layouter, config)?;
-//             let chip = PlacementChip::<Fp, S>::new(config.placement_config, self.ship);
-//             _ = chip.synthesize(layouter, commitments[0].clone(), commitments[1].clone());
-//             Ok(())
-//         }
-//     }
-
-//     #[test]
-//     fn placement_valid_case_0() {
-//         // check that a valid placement of carrier horizontally at 0, 0 succeeds
-//         const SHIP_LENGTH: usize = 5;
-//         let ship = ShipPlacement::<SHIP_LENGTH>::construct(0, 0, false);
-//         let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
-//         let k = 9;
-//         let prover = MockProver::run(k, &circuit, vec![]).unwrap();
-//         assert_eq!(prover.verify(), Ok(()));
-//     }
-
-//     // #[test]
-//     // fn placement_invalid_case_0() {
-//     //     // check that an invalid placement (attempts to assign less than necessary amount of bits)
-
-//     // }
-
-//     // #[test]
-//     fn print_circuit() {
-//         use plotters::prelude::*;
-//         const SHIP_LENGTH: usize = 5;
-//         let ship = ShipPlacement::<SHIP_LENGTH>::construct(0, 0, false);
-//         let circuit = TestCircuit::<SHIP_LENGTH>::new(ship);
-//         let root = BitMapBackend::new("src/placement/placement_layout.png", (1024, 768))
-//             .into_drawing_area();
-//         root.fill(&WHITE).unwrap();
-//         let root = root
-//             .titled("Placement Circuit Layout", ("sans-serif", 60))
-//             .unwrap();
-
-//         CircuitLayout::default()
-//             // You can optionally render only a section of the circuit.
-//             .view_width(0..2)
-//             .view_height(0..16)
-//             // You can hide labels, which can be useful with smaller areas.
-//             .show_labels(false)
-//             // Render the circuit onto your area!
-//             // The first argument is the size parameter for the circuit.
-//             .render(9, &circuit, &root)
-//             .unwrap();
-//     }
-// }
+        CircuitLayout::default()
+            // You can optionally render only a section of the circuit.
+            .view_width(0..2)
+            .view_height(0..16)
+            // You can hide labels, which can be useful with smaller areas.
+            .show_labels(false)
+            // Render the circuit onto your area!
+            // The first argument is the size parameter for the circuit.
+            .render(9, &circuit, &root)
+            .unwrap();
+    }
+}
 
 // // iterator to try ship of every size on
 // // correct placement

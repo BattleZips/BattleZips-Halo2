@@ -1,15 +1,17 @@
+use super::gadget::PlacementGadget;
+
 use {
     crate::{
         bits2num::bits2num::{Bits2NumChip, Bits2NumConfig},
-        placement::gadget::{InstructionUtilities, PlacementBits, PlacementGadget, PlacementState, BOARD_SIZE},
+        placement::gadget::{InstructionUtilities, PlacementBits, PlacementState, BOARD_SIZE},
         utils::{
             binary::{bits_to_field_elements, unwrap_bitvec},
             ship::ShipPlacement,
         },
     },
     halo2_proofs::{
-        arithmetic::FieldExt,
-        circuit::{AssignedCell, Chip, Layouter, Region, Value},
+        arithmetic::{lagrange_interpolate, FieldExt},
+        circuit::{AssignedCell, Chip, Layouter, Region},
         plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
         poly::Rotation,
     },
@@ -83,12 +85,14 @@ pub trait PlacementInstructions<F: FieldExt, const S: usize> {
      * Generate the running sum for bit counts and full bit windows
      *
      * @param bits - 100 assigned bits to permute into this region
+     * @param gadget - contains values for running sum trace to witness
      * @return - reference to final assignments for running bit sums and full bit window sums
      */
     fn placement_sums(
         &self,
         layouter: &mut impl Layouter<F>,
         bits: PlacementBits<F>,
+        gadget: PlacementGadget<F, S>,
     ) -> Result<PlacementState<F>, Error>;
 
     /**
@@ -116,7 +120,7 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
         // allocate fixed column for constants
         let fixed = meta.fixed_column();
         meta.enable_equality(fixed);
-        
+
         // define advice columns
         let mut advice = Vec::<Column<Advice>>::new();
         for _ in 0..3 {
@@ -146,7 +150,7 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
             let either_zero = horizontal.clone() * vertical.clone();
             // constrain sum == horizontal + vertical
             let summed = sum - (horizontal.clone() + vertical.clone());
-            let selector = meta.query_selector(selectors[1]);
+            let selector = meta.query_selector(selectors[0]);
             Constraints::with_selector(
                 selector,
                 [("Either h or v == 0", either_zero), ("h + v = sum", summed)],
@@ -161,7 +165,7 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
             let prev = meta.query_advice(advice[1], Rotation::prev());
             let sum = meta.query_advice(advice[1], Rotation::cur());
             // constrain sum to be equal to bit + prev
-            let selector = meta.query_selector(selectors[2]);
+            let selector = meta.query_selector(selectors[1]);
             Constraints::with_selector(selector, [("Running Sum: Bits", bit + prev - sum)])
         });
 
@@ -173,48 +177,71 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
                 let bit = meta.query_advice(advice[0], Rotation(i as i32));
                 bit_count = bit_count + bit;
             }
+
             // query full bit window running sum at column (A^4)
-            let prev_running_sum = meta.query_advice(advice[2], Rotation::prev());
-            let running_sum = meta.query_advice(advice[2], Rotation::cur());
+            let prev_full_window_count = meta.query_advice(advice[2], Rotation::prev());
+            let full_window_count = meta.query_advice(advice[2], Rotation::cur());
             // constant expressions
             let ship_len = Expression::Constant(F::from(S as u64));
+            let inverse_ship_len =
+                Expression::Constant(F::from(S as u64).invert().unwrap_or(F::zero()));
             let one = Expression::Constant(F::one());
 
             /*
-             * Constrain the expected value for the full bit window running sum
+             * Raise a given expression to the given power
              *
-             * @param count - the sum of all flipped bits in the window being queried
-             * @param prev - the previous running sum of all bit windows of length ship_len that were full
-             * @param sum - current running sum of all bit windows of length ship_len that are full
-             * @return 0 if [count != ship_len && prev == sum] or [count == ship_len && prev + 1 = sum ]
+             * @param base - the exponent base
+             * @param pow - the power to raise the exponent base to
+             * @return - the exponent base raised to power
              */
-            let running_sum_exp =
-                |count: Expression<F>, prev: Expression<F>, sum: Expression<F>| {
-                    // variable expressions
-                    let increment_case = prev.clone() + one.clone() - sum.clone();
-                    let equal_case = prev.clone() - sum.clone();
-                    let condition = one.clone() - one.clone() * (ship_len.clone() - count.clone());
-                    // return expected constraint equation
-                    condition.clone() * increment_case.clone()
-                        + (one.clone() - condition.clone()) * equal_case.clone()
-                };
+            let exp_pow = |base: Expression<F>, pow: usize| -> Expression<F> {
+                let mut exp = base.clone();
+                if pow == 0 {
+                    exp = Expression::Constant(F::one())
+                } else {
+                    for i in 2..=pow {
+                        exp = exp.clone() * base.clone();
+                    }
+                }
+                exp
+            };
+
+            /*
+             * Given a bit count, return the interpolated incrementor
+             * @dev expects input to be in range [0, S]
+             * @todo load lookup table with coefficients
+             *
+             * @param x - the sum of the bit window to pass in
+             * @return - a boolean expression showing whether or not X = S (can be added as incrementor)
+             */
+            let interpolate_incrementor = |x: Expression<F>| -> Expression<F> {
+                // generate lagrange interpolation inputs
+                // if ship length is 4, then [0->0, 1->0, 2->0, 3->0, 4->1]
+                let mut points = Vec::<F>::new();
+                let mut evals = Vec::<F>::new();
+                for i in 0..=S {
+                    points.push(F::from(i as u64));
+                    evals.push(if i == S { F::one() } else { F::zero() });
+                }
+                let interpolated = lagrange_interpolate(&points, &evals);
+                let mut interpolated_value = Expression::Constant(F::zero());
+                for i in 0..interpolated.len() {
+                    let x_pow = exp_pow(x.clone(), i);
+                    interpolated_value =
+                        interpolated_value.clone() + Expression::Constant(interpolated[i]) * x_pow;
+                }
+                interpolated_value
+            };
 
             // return constraint:
             // bit_count = bit_count
             // - if bit_count == ship_len, running_sum = prev_running_sum + 1
             // - if bit_count != ship_len, running_sum = prev_running
-            let selector = meta.query_selector(selectors[3]);
-            Constraints::with_selector(
-                selector,
-                [(
-                    "Full Window Running Sum",
-                    running_sum_exp(
-                        bit_count.clone(),
-                        prev_running_sum.clone(),
-                        running_sum.clone(),
-                    ),
-                )],
-            )
+            let selector = meta.query_selector(selectors[2]);
+            let constraint = full_window_count.clone()
+                - prev_full_window_count
+                - interpolate_incrementor(bit_count);
+            Constraints::with_selector(selector, [("Full Window Running Sum", constraint)])
         });
 
         // selector[3] gate: permute bit window running sum
@@ -225,7 +252,7 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
             let previous = meta.query_advice(advice[2], Rotation::prev());
             let current = meta.query_advice(advice[2], Rotation::cur());
             // constrain previous to equal current
-            let selector = meta.query_selector(selectors[4]);
+            let selector = meta.query_selector(selectors[3]);
             Constraints::with_selector(
                 selector,
                 [("Premute Full Window Running Sum", previous - current)],
@@ -266,11 +293,11 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
         mut layouter: impl Layouter<F>,
         horizontal: AssignedCell<F, F>,
         vertical: AssignedCell<F, F>,
+        gadget: PlacementGadget<F, S>,
     ) -> Result<(), Error> {
         let placement_commitments = self.load_placement(&mut layouter, horizontal, vertical)?;
-        // println!("commitment: {:?}", placement_commitments[0].clone());
         let bits = self.synth_bits2num(&mut layouter, placement_commitments[0].clone())?;
-        let running_sums = self.placement_sums(&mut layouter, bits)?;
+        let running_sums = self.placement_sums(&mut layouter, bits, gadget)?;
         // self.assign_constraint(&mut layouter, running_sums)?;
         Ok(())
     }
@@ -332,6 +359,7 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
         &self,
         layouter: &mut impl Layouter<F>,
         bits2num: PlacementBits<F>,
+        gadget: PlacementGadget<F, S>,
     ) -> Result<PlacementState<F>, Error> {
         Ok(layouter.assign_region(
             || "placement running sum trace",
@@ -340,21 +368,9 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
                 // Rotation::prev() from unintended consequences
                 let mut state = PlacementState::<F>::assign_padding_row(&mut region, &self.config)?;
                 // permute bits constrained in "load placement encoded values" region to this region
-                let bits = state.permute_bits2num(&bits2num, &mut region, &self.config)?;
+                let _ = state.permute_bits2num(&bits2num, &mut region, &self.config)?;
                 // // assign running sum trace across 100 (BOARD_SIZE) rows
-                let window_condition = |offset: usize| (offset - 1) % 10 + S < 10;
-                // for i in 1..=6 {
-                //     println!("Window Condition: {}", window_condition(i));
-                //     if window_condition(i) {
-                //         // assign row that can increment full bit window running sum
-                //         state =
-                //             state.assign_window_row::<S>(&bits, &mut region, &self.config, i)?;
-                //     } else {
-                //         // assign row that can only increment total bit sum
-                //         state =
-                //             state.assign_permute_row::<S>(&bits, &mut region, &self.config, i)?;
-                //     }
-                // }
+                state = state.assign_running_sum_trace(&mut region, &self.config, &gadget)?;
                 Ok(state)
             },
         )?)
