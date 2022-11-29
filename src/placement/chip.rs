@@ -6,7 +6,7 @@ use {
         placement::gadget::{InstructionUtilities, PlacementBits, PlacementState, BOARD_SIZE},
         utils::{
             binary::{bits_to_field_elements, unwrap_bitvec},
-            ship::{ShipPlacement, PlacementUtilities}
+            ship::{PlacementUtilities, ShipPlacement},
         },
     },
     halo2_proofs::{
@@ -40,7 +40,6 @@ pub struct PlacementConfig<F: FieldExt, const S: usize> {
 
 pub struct PlacementChip<F: FieldExt, const S: usize> {
     config: PlacementConfig<F, S>,
-    ship: ShipPlacement<S>,
 }
 
 impl<F: FieldExt, const S: usize> Chip<F> for PlacementChip<F, S> {
@@ -72,12 +71,14 @@ pub trait PlacementInstructions<F: FieldExt, const S: usize> {
     /**
      * Generate a bits2num region and constrain it to equal a given assigned cell
      *
+     * @param gadget - contains bit assigments
      * @param value - assigned call that bits2num should compose to (SUM(H, V))
      * @return - array of 100 assigned cells representing bits
      */
     fn synth_bits2num(
         &self,
         layouter: &mut impl Layouter<F>,
+        gadget: PlacementGadget<F, S>,
         value: AssignedCell<F, F>,
     ) -> Result<PlacementBits<F>, Error>;
 
@@ -109,8 +110,8 @@ pub trait PlacementInstructions<F: FieldExt, const S: usize> {
 }
 
 impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
-    pub fn new(config: PlacementConfig<F, S>, ship: ShipPlacement<S>) -> Self {
-        PlacementChip { config, ship }
+    pub fn new(config: PlacementConfig<F, S>) -> Self {
+        PlacementChip { config }
     }
 
     /**
@@ -296,7 +297,7 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
         gadget: PlacementGadget<F, S>,
     ) -> Result<(), Error> {
         let placement_commitments = self.load_placement(&mut layouter, horizontal, vertical)?;
-        let bits = self.synth_bits2num(&mut layouter, placement_commitments[0].clone())?;
+        let bits = self.synth_bits2num(&mut layouter, gadget, placement_commitments[0].clone())?;
         let running_sums = self.placement_sums(&mut layouter, bits, gadget)?;
         self.assign_constraint(&mut layouter, running_sums)?;
         Ok(())
@@ -345,11 +346,10 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
     fn synth_bits2num(
         &self,
         layouter: &mut impl Layouter<F>,
+        gadget: PlacementGadget<F, S>,
         value: AssignedCell<F, F>,
     ) -> Result<PlacementBits<F>, Error> {
-        let bits: [F; BOARD_SIZE] =
-            bits_to_field_elements::<F, BOARD_SIZE>(unwrap_bitvec(self.ship.to_bits()));
-        let bits2num = Bits2NumChip::<F, BOARD_SIZE>::new(value, bits);
+        let bits2num = Bits2NumChip::<F, BOARD_SIZE>::new(value, gadget.bits);
         let assigned_bits =
             bits2num.synthesize(self.config.bits2num, layouter.namespace(|| "bits2num"))?;
         Ok(PlacementBits::<F>::from(assigned_bits))

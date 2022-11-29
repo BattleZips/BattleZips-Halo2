@@ -3,7 +3,7 @@ use {
         placement::chip::PlacementConfig,
         utils::{
             binary::{bits_to_field_elements, unwrap_bitvec},
-            ship::{ShipPlacement, PlacementUtilities}
+            ship::{PlacementUtilities, ShipPlacement},
         },
     },
     halo2_proofs::{
@@ -242,14 +242,14 @@ pub struct PlacementGadget<F: FieldExt, const S: usize> {
 
 impl<F: FieldExt, const S: usize> PlacementGadget<F, S> {
     /**
-     * Given a ShipPlacement object, construct the running sum traces
+     * Helper/ private method for assigning trace in gadget
+     * @dev not directly called - either called by rational or malicious gadget builder
      *
-     * @param ship: ship helper object
-     * @return - gadget containing values needed to use PlacementChip
+     * @param bits - array of bits decomposed in circuit
+     * @return - array of 2 arrays of length 100 for chip trace
+     *     - [bit_sum, full_window_sum]
      */
-    pub fn new(ship: ShipPlacement<S>) -> Self {
-        // encode ship placement for arithemtization
-        let bits = bits_to_field_elements::<F, BOARD_SIZE>(unwrap_bitvec(ship.to_bits()));
+    fn assign_trace(bits: &[F; BOARD_SIZE]) -> [[F; BOARD_SIZE]; 2] {
         // compute bit_sum trace
         let mut trace: Vec<F> = Vec::<F>::new();
         trace.push(bits[0]);
@@ -284,13 +284,77 @@ impl<F: FieldExt, const S: usize> PlacementGadget<F, S> {
             }
         }
         let full_window_sum: [F; BOARD_SIZE] = trace.try_into().unwrap();
-
+        vec![bit_sum, full_window_sum].try_into().unwrap()
+    }
+    /**
+     * Given a ShipPlacement object, construct the running sum traces
+     *
+     * @param ship: ship helper object
+     * @return - gadget containing values needed to use PlacementChip
+     */
+    pub fn new(ship: ShipPlacement<S>) -> Self {
+        // encode ship placement for arithemtization
+        let bits = bits_to_field_elements::<F, BOARD_SIZE>(unwrap_bitvec(ship.to_bits()));
+        // build computation trace
+        let trace = PlacementGadget::<F, S>::assign_trace(&bits);
         // return object
         PlacementGadget {
             ship,
             bits,
-            bit_sum,
-            full_window_sum,
+            bit_sum: trace[0],
+            full_window_sum: trace[1],
         }
     }
 }
+
+/**
+ * Utilities to make malicious assignments to the circuit (for testing purposes)
+ */
+pub trait MaliciousPlacement<F: FieldExt, const S: usize> {
+    /**
+     * Create a gadget that assigns the trace with an incorrect length
+     *
+     * @param MS - the malicious ship size
+     * @param ship - the x, y, z coordinates to use for placement
+     * @return - trace for placement where ship size is different from the circuit constraint
+     */
+    fn mal_length<const MS: usize>(ship: ShipPlacement<S>, length: usize) -> Self;
+
+    /**
+     * Create a gadget that assigns the trace with correct # of bits but not placed adjacently
+     *
+     * @return - trace for placement where adjacency does not hold
+     */
+    fn mal_adj_eq_bits() -> Self;
+
+    /**
+     * Create a gadget that assigns the trace with < S bits not placed adjacently
+     *
+     * @return - trace for placement where adjacency does not hold, too many bits
+     */
+    fn mal_adj_gt_bits() -> Self;
+
+    /**
+     * Create a gadget that assigns the trace with > S bits not placed adjacently
+     *
+     * @return - trace for placement where adjacency does not hold, not enough bits
+     */
+    fn mal_adj_lt_bits() -> Self;
+}
+
+// impl<F: FieldExt, const S: usize> MaliciousPlacement<F, S> for PlacementGadget<F, S> {
+//     fn mal_length<const MS: usize>(ship: ShipPlacement<S>, length: usize) -> Self {
+//         // build ship object around malicious size input
+//         let mal_ship = ShipPlacement::<MS>::construct(ship.x, ship.y, ship.z);
+//         let bits = bits_to_field_elements::<F, BOARD_SIZE>(unwrap_bitvec(ship.to_bits()));
+//         // build computation trace
+//         let trace = PlacementGadget::<F, S>::assign_trace(&bits);
+//         // return object
+//         PlacementGadget {
+//             ship: mal_ship,
+//             bits,
+//             bit_sum: trace[0],
+//             full_window_sum: trace[1],
+//         }
+//     }
+// }

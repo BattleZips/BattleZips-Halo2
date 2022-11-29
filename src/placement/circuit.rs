@@ -6,17 +6,14 @@ mod test {
                 chip::{PlacementChip, PlacementConfig},
                 gadget::{PlacementGadget, CHIP_SIZE},
             },
-            utils::{
-                ship::{ShipPlacement, PlacementUtilities},
-                binary::bytes2bits
-            }
+            utils::ship::{PlacementUtilities, ShipPlacement},
         },
         halo2_proofs::{
             arithmetic::FieldExt,
             circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
             dev::{CircuitLayout, FailureLocation, MockProver, VerifyFailure},
             pasta::Fp,
-            plonk::{Any, Advice, Circuit, Column, ConstraintSystem, Error},
+            plonk::{Advice, Any, Circuit, Column, ConstraintSystem, Error},
         },
     };
 
@@ -28,14 +25,13 @@ mod test {
 
     #[derive(Debug, Clone, Copy)]
     struct TestCircuit<const S: usize> {
-        pub ship: ShipPlacement<S>,
         pub gadget: PlacementGadget<Fp, S>,
     }
 
     impl<const S: usize> TestCircuit<S> {
         fn new(ship: ShipPlacement<S>) -> TestCircuit<S> {
             let gadget = PlacementGadget::<Fp, S>::new(ship);
-            TestCircuit { ship, gadget }
+            TestCircuit { gadget }
         }
 
         /**
@@ -53,13 +49,13 @@ mod test {
                 || "placement ship test trace",
                 |mut region| {
                     // compute horizontal and vertical values
-                    let decimal = self.ship.to_decimal();
-                    let horizontal = if self.ship.z {
+                    let decimal = self.gadget.ship.to_decimal();
+                    let horizontal = if self.gadget.ship.z {
                         Value::known(Fp::zero())
                     } else {
                         Value::known(Fp::from_u128(decimal))
                     };
-                    let vertical = if self.ship.z {
+                    let vertical = if self.gadget.ship.z {
                         Value::known(Fp::from_u128(decimal))
                     } else {
                         Value::known(Fp::zero())
@@ -80,7 +76,6 @@ mod test {
                 },
             )?)
         }
-
     }
 
     impl<const S: usize> Circuit<Fp> for TestCircuit<S> {
@@ -109,7 +104,7 @@ mod test {
         ) -> Result<(), Error> {
             // assign test trace
             let commitments = self.witness_trace(&mut layouter, config)?;
-            let chip = PlacementChip::<Fp, S>::new(config.placement_config, self.ship);
+            let chip = PlacementChip::<Fp, S>::new(config.placement_config);
             _ = chip.synthesize(
                 layouter,
                 commitments[0].clone(),
@@ -155,15 +150,13 @@ mod test {
                     (5, "running sum constraints").into(),
                     1,
                     "One full bit window"
-                ).into(),
+                )
+                    .into(),
                 location: FailureLocation::InRegion {
                     region: (4, "constrain running sum output").into(),
                     offset: 0
                 },
-                cell_values: vec![(
-                    ((Any::Advice, 2).into(), 0).into(),
-                    String::from("0")
-                )]
+                cell_values: vec![(((Any::Advice, 2).into(), 0).into(), String::from("0"))]
             }])
         );
     }
@@ -183,15 +176,13 @@ mod test {
                     (5, "running sum constraints").into(),
                     1,
                     "One full bit window"
-                ).into(),
+                )
+                    .into(),
                 location: FailureLocation::InRegion {
                     region: (4, "constrain running sum output").into(),
                     offset: 0
                 },
-                cell_values: vec![(
-                    ((Any::Advice, 2).into(), 0).into(),
-                    String::from("0")
-                )]
+                cell_values: vec![(((Any::Advice, 2).into(), 0).into(), String::from("0"))]
             }])
         );
     }
