@@ -3,10 +3,11 @@ use super::gadget::PlacementGadget;
 use {
     crate::{
         bits2num::bits2num::{Bits2NumChip, Bits2NumConfig},
-        placement::gadget::{InstructionUtilities, PlacementBits, PlacementState, BOARD_SIZE},
+        placement::gadget::{InstructionUtilities, PlacementBits, PlacementState},
         utils::{
             binary::{bits_to_field_elements, unwrap_bitvec},
             ship::{PlacementUtilities, ShipPlacement},
+            board::BOARD_SIZE
         },
     },
     halo2_proofs::{

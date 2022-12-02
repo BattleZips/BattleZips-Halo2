@@ -1,8 +1,11 @@
-use halo2_proofs::{
-    arithmetic::FieldExt,
-    circuit::{AssignedCell, Layouter, Region, Value},
-    plonk::{Advice, Column, ConstraintSystem, Error, Expression, Selector},
-    poly::Rotation,
+use {
+    bitvec::prelude::*,
+    halo2_proofs::{
+        arithmetic::FieldExt,
+        circuit::{AssignedCell, Layouter, Region, Value},
+        plonk::{Advice, Column, ConstraintSystem, Error, Expression, Selector},
+        poly::Rotation,
+    },
 };
 
 /// Configuration elements for the circuit defined here.
@@ -131,18 +134,20 @@ impl<F: FieldExt, const B: usize> Bits2NumChip<F, B> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use halo2_proofs::{
-        circuit::SimpleFloorPlanner,
-        dev::{metadata, CircuitLayout, FailureLocation, MockProver, VerifyFailure},
-        pasta::{group::ff::PrimeFieldBits, Fp},
-        plonk::{Any, Circuit},
+    use {
+        super::*,
+        crate::utils::{binary::to_field, board::BOARD_SIZE, ship::*},
+        halo2_proofs::{
+            circuit::SimpleFloorPlanner,
+            dev::{metadata, CircuitLayout, FailureLocation, MockProver, VerifyFailure},
+            pasta::{group::ff::PrimeFieldBits, Fp},
+            plonk::{Any, Circuit},
+        },
     };
 
-    use crate::utils::{
-        binary::{bits_to_field_elements, bytes2bits, unwrap_bitarr, unwrap_bitvec},
-        ship::{PlacementUtilities, ShipPlacement},
-    };
+    const DEFAULT_BITS: usize = 256; // 256 bit max/ default testing
+    const CIRCUIT_SIZE: u32 = 9; // 2^CIRCUIT_SIZE rows used in circuit
+    pub type Bits = BitArray<[u64; 4], Lsb0>; // 256 bit unsigned integer stored in BitArray
 
     #[derive(Clone)]
     struct TestConfig {
@@ -153,15 +158,12 @@ mod test {
     #[derive(Debug, Clone)]
     struct TestCircuit<const B: usize> {
         decimal: Fp,
-        binary: [bool; B],
+        binary: BitArray<[u64; 4], Lsb0>,
     }
 
     impl<const B: usize> TestCircuit<B> {
-        fn new(x: Fp, y: [bool; B]) -> Self {
-            Self {
-                decimal: x,
-                binary: y,
-            }
+        fn new(decimal: Fp, binary: Bits) -> Self {
+            Self { decimal, binary }
         }
     }
 
@@ -174,7 +176,7 @@ mod test {
         }
 
         fn configure(meta: &mut ConstraintSystem<Fp>) -> TestConfig {
-            let bits2num = Bits2NumChip::<_, 256>::configure(meta);
+            let bits2num = Bits2NumChip::<_, DEFAULT_BITS>::configure(meta);
             let trace = meta.advice_column();
 
             meta.enable_equality(trace);
@@ -198,7 +200,7 @@ mod test {
                     )
                 },
             )?;
-            let bits = bits_to_field_elements(self.binary);
+            let bits = to_field::<Fp, B>(self.binary);
 
             let bits2num = Bits2NumChip::new(decimal, bits);
             let _ = bits2num.synthesize(config.bits2num, layouter.namespace(|| "bits2num"))?;
@@ -211,11 +213,8 @@ mod test {
     fn test_bits_to_num() {
         // Testing field element 0x01234567890abcdef.
         let value = Fp::from(1311768467294899695u64);
-        let bits = unwrap_bitarr::<256>(value.to_le_bits());
-        let circuit = TestCircuit::<256>::new(value, bits);
-        let k = 9;
-        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
-
+        let circuit = TestCircuit::<DEFAULT_BITS>::new(value, value.to_le_bits());
+        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -223,49 +222,33 @@ mod test {
     fn test_bits_to_num_big() {
         // Testing biggest value in the field.
         let value = Fp::zero().sub(&Fp::one());
-        let bits = unwrap_bitarr::<256>(value.to_le_bits());
-        let circuit = TestCircuit::<256>::new(value, bits);
-        let k = 9;
-        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
-
+        let circuit = TestCircuit::<DEFAULT_BITS>::new(value, value.to_le_bits());
+        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
     #[test]
     fn test_bits_to_num_big_plus() {
-        // Testing biggest value in the field + 1.
-        // https://neuromancer.sk/std/other/Pallas - value that should wrap around to 0 on Fp
-        let mut big_value: [u8; 32] =
-            hex::decode("40000000000000000000000000000000224698fc094cf91b992d30ed00000001")
-                .unwrap()
-                .try_into()
-                .unwrap();
-        big_value.reverse();
-        let bits = bytes2bits::<256>(big_value);
-        let circuit = TestCircuit::<256>::new(Fp::zero(), bits);
-        let k = 9;
-        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
-
-        assert_eq!(prover.verify(), Ok(()));
-    }
-
-    #[test]
-    fn test_bits_to_num_zero_bits() {
-        // Testing zero as value with 0 bits.
-        let circuit = TestCircuit::<0>::new(Fp::zero(), [false; 0]);
-        let k = 9;
-        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
-
+        // Testing biggest value in the field + 1: 0x40000000000000000000000000000000224698fc094cf91b992d30ed00000001
+        // see https://neuromancer.sk/std/other/Pallas
+        let value_u256 = [
+            11037532056220336129u64,
+            2469829653914515739,
+            0,
+            4611686018427387904,
+        ];
+        let bits = BitArray::<[u64; 4], Lsb0>::new(value_u256);
+        let circuit = TestCircuit::<DEFAULT_BITS>::new(Fp::zero(), bits);
+        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
     #[test]
     fn test_bits_to_num_zero_value() {
         // Testing zero as value with 254 bits.
-        let circuit = TestCircuit::<254>::new(Fp::zero(), [false; 254]);
-        let k = 9;
-        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
-
+        let value = Fp::zero();
+        let circuit = TestCircuit::<254>::new(value, value.to_le_bits());
+        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -275,22 +258,18 @@ mod test {
         // demonstrate with a carrier ship (length 5) placed vertically at x:4, y: 3
 
         // prepare values to be witnessed by mock circuit
-        const SHIP_LENGTH: usize = 5;
-        const BOARD_SIZE: usize = 100;
-        let ship = ShipPlacement::<SHIP_LENGTH>::construct(4, 3, true);
-        let bits = unwrap_bitvec(ship.to_bits());
-        let decimal = ship.to_decimal();
+        let ship = Ship::<{ ShipType::Carrier }>::new(4, 3, true);
+        let bits = ship.bits();
+        let value = Fp::from_raw(bits.data);
 
         // use values with bits2num test circuit
-        let circuit = TestCircuit::<BOARD_SIZE>::new(Fp::from_u128(decimal), bits);
-        let k = 9;
-        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
+        let circuit = TestCircuit::<BOARD_SIZE>::new(value, bits);
+        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
 
-        // check that value fails if decimal is incremented
-        let decimal = ship.to_decimal() + 1u128;
-        let circuit = TestCircuit::<BOARD_SIZE>::new(Fp::from_u128(decimal), bits);
-        let prover = MockProver::run(k, &circuit, vec![]).unwrap();
+        // // check that value fails if decimal is incremented
+        let circuit = TestCircuit::<BOARD_SIZE>::new(value + Fp::one(), bits);
+        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
         assert_eq!(
             prover.verify(),
             Err(vec![
@@ -315,7 +294,8 @@ mod test {
     #[test]
     fn print_layout() {
         use plotters::prelude::*;
-        let circuit = TestCircuit::<256>::new(Fp::one(), [false; 256]);
+        let value = Fp::zero();
+        let circuit = TestCircuit::<DEFAULT_BITS>::new(value, value.to_le_bits());
         let root =
             BitMapBackend::new("src/bits2num/bits2num_layout.png", (1024, 768)).into_drawing_area();
         root.fill(&WHITE).unwrap();
@@ -343,7 +323,7 @@ mod test {
     // // 		0, 0, 0, 0, 0, 0, 0,
     // // 	];
 
-    // // 	let circuit = TestCircuit::<256>::new(numba, numba_bytes);
+    // // 	let circuit = TestCircuit::<DEFAULT_BITS>::new(numba, numba_bytes);
     // // 	let k = 9;
     // // 	let rng = &mut rand::thread_rng();
     // // 	let params = generate_params(k);
