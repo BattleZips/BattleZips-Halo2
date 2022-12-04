@@ -1,7 +1,5 @@
-use plotters::coord;
-
 use {
-    crate::utils::{binary::Bits, board::BOARD_SIZE},
+    crate::utils::{binary::BinaryValue, board::BOARD_SIZE},
     bitvec::prelude::*,
 };
 
@@ -77,7 +75,7 @@ impl Ship {
      * Render ASCII to the console representing the ship placement
      */
     pub fn print(self) {
-        let bits = self.bits();
+        let bits = self.bits().into_inner();
         let mut lines = Vec::<String>::new();
         for i in 0..BOARD_SIZE {
             if i % 10 == 0 {
@@ -141,12 +139,32 @@ impl Ship {
      *
      * @return - BitArray booleans representing serialized board state with placement as u256
      */
-    pub fn bits(self) -> Bits {
+    pub fn bits(self) -> BinaryValue {
         let coordinates = self.coordinates();
         let mut state = bitarr![u64, Lsb0; 0; BOARD_SIZE];
         for coordinate in coordinates {
             state.get_mut(coordinate).unwrap().set(true);
         }
-        BitArray::<[u64; 4], Lsb0>::from([state.into_inner()[0], state.into_inner()[1], 0, 0])
+        BinaryValue::new(
+            BitArray::<[u64; 4], Lsb0>::from([state.into_inner()[0], state.into_inner()[1], 0, 0])
+        )
+    }
+}
+
+// use in a halo 2 proof
+impl Ship {
+    /**
+     * Export a horizontal and vertical bit commitment
+     * @notice the unplaced orientation will be 0/ empty
+     *
+     * @return - array of two placements where one is 0
+     */
+    pub fn private_witness(self) -> [BinaryValue; 2] {
+        let placement = self.bits();
+        let zero = BinaryValue::new(BitArray::ZERO);
+        match self.z {
+            true => [zero, placement],
+            false => [placement, zero],
+        }
     }
 }

@@ -1,28 +1,68 @@
-use {bitvec::prelude::*, halo2_proofs::arithmetic::FieldExt};
+use {
+    bitvec::prelude::*,
+    halo2_proofs::{
+        arithmetic::FieldExt,
+        pasta::{Fp, Fq},
+    },
+};
 
-pub type Bits = BitArray<[u64; 4], Lsb0>; // 256 bit unsigned integer stored in BitArray
+/**
+ * Binary element with converstion functionality
+ * @dev stored in 256 bit integer
+ */
 
-/// Converts given bytes to the bits.
-pub fn bytes2bits<const B: usize>(num: [u8; 32]) -> [bool; B] {
-    let mut bits = [false; B];
-    for i in 0..B {
-        bits[i] = num[i / 8] & (1 << (i % 8)) != 0;
+pub type U256 = BitArray<[u64; 4], Lsb0>; // 256 bit integer in little endian
+
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub struct BinaryValue(U256);
+
+impl BinaryValue {
+
+    // wrap 256 bit BitArray in BinaryValue object
+    pub fn new(value: U256) -> BinaryValue {
+        BinaryValue(value)
     }
-    bits
-}
 
-// https://citizen-stig.github.io/2020/04/04/converting-bits-to-integers-in-rust-using-generics.html
-// convert (expected) BitVec of len 100 into u128
-pub fn bits2num(bits: &Bits) -> u128 {
-    bits.iter()
-        .fold(0, |result, bit| (result << 1) ^ *bit as u128)
-}
+    // unwrap the underlying bitarray
+    pub fn into_inner(self) -> U256 {
+        self.0
+    }
 
-pub fn to_field<F: FieldExt, const B: usize>(bits: BitArray<[u64; 4], Lsb0>) -> [F; B] {
-    bits.into_inner().view_bits::<Lsb0>()[0..B]
-        .into_iter()
-        .map(|bit| F::from(*bit))
-        .collect::<Vec<F>>()
-        .try_into()
-        .unwrap()
+    /**
+     * Convert the binary value to an array of bits on a given prime field
+     *
+     * @param F: the prime field to wrap bits in
+     * @param S: the number of bits in the field
+     * @return - array of bits of length S on Field F
+     */
+    pub fn bitfield<F: FieldExt, const S: usize>(self) -> [F; S] {
+        self.0.into_inner().view_bits::<Lsb0>()[0..S]
+            .into_iter()
+            .map(|bit| F::from(*bit))
+            .collect::<Vec<F>>()
+            .try_into()
+            .unwrap()
+    }
+
+    /**
+     * Return the element as a element on Pallas curve (Fp)
+     * @dev hack since can't use FieldExt::from_raw
+     *
+     * @return - congruent element on Fp
+     */
+    pub fn fp(self) -> Fp {
+        // convert into bytes wide
+        Fp::from_raw(self.0.data)
+    }
+
+    /**
+     * Return the element as a element on Vesta curve (Fq)
+     * @dev hack since can't use FieldExt::from_raw
+     *
+     * @return - congruent element on Fq
+     */
+    pub fn fq(self) -> Fq {
+        // convert into bytes wide
+        Fq::from_raw(self.0.data)
+    }
 }

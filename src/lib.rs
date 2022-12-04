@@ -5,6 +5,7 @@
 
 // mod board;
 mod utils;
-mod placement;
+// mod placement;
 mod bits2num;
-mod board;
+// mod board;
+// mod transpose;

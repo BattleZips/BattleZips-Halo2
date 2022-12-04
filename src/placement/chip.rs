@@ -1,13 +1,11 @@
-use super::gadget::PlacementGadget;
-
 use {
+    super::gadget::PlacementGadget,
     crate::{
         bits2num::bits2num::{Bits2NumChip, Bits2NumConfig},
         placement::gadget::{InstructionUtilities, PlacementBits, PlacementState},
         utils::{
-            binary::{bits_to_field_elements, unwrap_bitvec},
+            board::BOARD_SIZE,
             ship::{PlacementUtilities, ShipPlacement},
-            board::BOARD_SIZE
         },
     },
     halo2_proofs::{

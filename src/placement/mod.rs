@@ -1,3 +1,3 @@
-// mod chip;
-// mod gadget;
-// mod circuit;
+pub mod chip;
+pub mod gadget;
+pub mod circuit;

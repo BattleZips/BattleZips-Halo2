@@ -1,4 +1,5 @@
 use {
+    crate::utils::{binary::BinaryValue, board::BOARD_SIZE},
     bitvec::prelude::*,
     halo2_proofs::{
         arithmetic::FieldExt,
@@ -6,10 +7,6 @@ use {
         plonk::{Advice, Column, ConstraintSystem, Error, Expression, Selector},
         poly::Rotation,
     },
-    crate::utils::{
-        binary::Bits,
-        board::BOARD_SIZE
-    }
 };
 
 /// Configuration elements for the circuit defined here.
@@ -140,7 +137,7 @@ impl<F: FieldExt, const B: usize> Bits2NumChip<F, B> {
 mod test {
     use {
         super::*,
-        crate::utils::{binary::to_field, board::BOARD_SIZE, ship::*},
+        crate::utils::{board::BOARD_SIZE, ship::*},
         halo2_proofs::{
             circuit::SimpleFloorPlanner,
             dev::{metadata, CircuitLayout, FailureLocation, MockProver, VerifyFailure},
@@ -161,11 +158,11 @@ mod test {
     #[derive(Debug, Clone)]
     struct TestCircuit<const B: usize> {
         decimal: Fp,
-        binary: BitArray<[u64; 4], Lsb0>,
+        binary: BinaryValue,
     }
 
     impl<const B: usize> TestCircuit<B> {
-        fn new(decimal: Fp, binary: Bits) -> Self {
+        fn new(decimal: Fp, binary: BinaryValue) -> Self {
             Self { decimal, binary }
         }
     }
@@ -203,7 +200,7 @@ mod test {
                     )
                 },
             )?;
-            let bits = to_field::<Fp, B>(self.binary);
+            let bits = self.binary.bitfield::<Fp, B>();
 
             let bits2num = Bits2NumChip::new(decimal, bits);
             let _ = bits2num.synthesize(config.bits2num, layouter.namespace(|| "bits2num"))?;
@@ -216,7 +213,7 @@ mod test {
     fn test_bits_to_num() {
         // Testing field element 0x01234567890abcdef.
         let value = Fp::from(1311768467294899695u64);
-        let circuit = TestCircuit::<DEFAULT_BITS>::new(value, value.to_le_bits());
+        let circuit = TestCircuit::<DEFAULT_BITS>::new(value, BinaryValue::new(value.to_le_bits()));
         let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
@@ -225,7 +222,7 @@ mod test {
     fn test_bits_to_num_big() {
         // Testing biggest value in the field.
         let value = Fp::zero().sub(&Fp::one());
-        let circuit = TestCircuit::<DEFAULT_BITS>::new(value, value.to_le_bits());
+        let circuit = TestCircuit::<DEFAULT_BITS>::new(value, BinaryValue::new(value.to_le_bits()));
         let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
@@ -241,7 +238,7 @@ mod test {
             4611686018427387904,
         ];
         let bits = BitArray::<[u64; 4], Lsb0>::new(value_u256);
-        let circuit = TestCircuit::<DEFAULT_BITS>::new(Fp::zero(), bits);
+        let circuit = TestCircuit::<DEFAULT_BITS>::new(Fp::zero(), BinaryValue::new(bits));
         let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
@@ -250,7 +247,7 @@ mod test {
     fn test_bits_to_num_zero_value() {
         // Testing zero as value with 254 bits.
         let value = Fp::zero();
-        let circuit = TestCircuit::<254>::new(value, value.to_le_bits());
+        let circuit = TestCircuit::<254>::new(value, BinaryValue::new(value.to_le_bits()));
         let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
@@ -263,8 +260,8 @@ mod test {
         // prepare values to be witnessed by mock circuit
         let ship = Ship::new(ShipType::Carrier, 4, 3, true);
         let bits = ship.bits();
-        let value = Fp::from_raw(bits.data);
-        
+        let value = Fp::from_raw(bits.into_inner().into_inner());
+
         // use values with bits2num test circuit
         let circuit = TestCircuit::<BOARD_SIZE>::new(value, bits);
         let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
@@ -298,7 +295,7 @@ mod test {
     fn print_layout() {
         use plotters::prelude::*;
         let value = Fp::zero();
-        let circuit = TestCircuit::<DEFAULT_BITS>::new(value, value.to_le_bits());
+        let circuit = TestCircuit::<DEFAULT_BITS>::new(value, BinaryValue::new(value.to_le_bits()));
         let root =
             BitMapBackend::new("src/bits2num/bits2num_layout.png", (1024, 768)).into_drawing_area();
         root.fill(&WHITE).unwrap();
