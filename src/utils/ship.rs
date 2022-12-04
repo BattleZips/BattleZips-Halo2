@@ -1,11 +1,11 @@
-use crate::board::gadget::BitCommitments;
+use plotters::coord;
 
 use {
-    crate::utils::{binary::bits2num, board::BOARD_SIZE},
+    crate::utils::{binary::Bits, board::BOARD_SIZE},
     bitvec::prelude::*,
 };
 
-#[derive(Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 
 pub enum ShipType {
     Carrier,
@@ -15,24 +15,51 @@ pub enum ShipType {
     Destroyer,
 }
 
-// type of a decomposed ship commitment
-pub type ShipBits = BitArray<[u64; 4], Lsb0>;
+impl ShipType {
+    /**
+     * Return the length of the ship given its type
+     *
+     * @return - ship length according to S: ShipType as a usize const
+     */
+    pub const fn length(self) -> usize {
+        match self {
+            ShipType::Carrier => 5,
+            ShipType::Battleship => 4,
+            ShipType::Cruiser => 3,
+            ShipType::Submarine => 3,
+            ShipType::Destroyer => 2,
+        }
+    }
 
-// type of a ship commitment
-pub type ShipCommitment = [u64; 4];
+    /**
+     * Return the name of the ship given its type
+     *
+     * @return - name of the ship as a String
+     */
+    pub const fn name(self) -> &'static str {
+        match self {
+            ShipType::Carrier => "Aircraft Carrier",
+            ShipType::Battleship => "Battleship",
+            ShipType::Cruiser => "Cruiser",
+            ShipType::Submarine => "Submarine",
+            ShipType::Destroyer => "Destroyer",
+        }
+    }
+}
 
 /**
  * Definition of a ship's placement on a board
  */
 #[derive(Clone, Copy, Debug)]
-pub struct Ship<const S: ShipType> {
+pub struct Ship {
+    pub ship_type: ShipType,
     pub x: u8, // [0, 9]
     pub y: u8, // [0, 9]
     pub z: bool,
 }
 
 // basic access/ construction/ debugging functionality
-impl<const S: ShipType> Ship<S> {
+impl Ship {
     /**
      * Construct a new Ship object given x, y, z notation + type
      *
@@ -42,23 +69,8 @@ impl<const S: ShipType> Ship<S> {
      * @param z - dictates whether ship extends from x, y horizontally or veritcally
      * @return - instantiated Ship object
      */
-    pub fn new(x: u8, y: u8, z: bool) -> Ship<S> {
-        Self { x, y, z }
-    }
-
-    /**
-     * Return the length of the ship given its type
-     *
-     * @return - ship length according to S: ShipType as a usize const
-     */
-    pub const fn length(self) -> usize {
-        match S {
-            ShipType::Carrier => 5,
-            ShipType::Battleship => 4,
-            ShipType::Cruiser => 3,
-            ShipType::Submarine => 3,
-            ShipType::Destroyer => 2,
-        }
+    pub fn new(ship_type: ShipType, x: u8, y: u8, z: bool) -> Ship {
+        Self { ship_type, x, y, z }
     }
 
     /**
@@ -91,24 +103,50 @@ impl<const S: ShipType> Ship<S> {
     }
 }
 
-impl<const S: ShipType> Ship<S> {
+// use in battleship game
+impl Ship {
+    /**
+     * Return a vector of the coordinates on the game board this ship covers
+     *
+     * @return - vector of ship_type.length() size containing assigned coordinates
+     */
+    pub fn coordinates(self) -> Vec<usize> {
+        let length = self.ship_type.length();
+        let mut coordinates = Vec::<usize>::new();
+        for i in 0..length {
+            coordinates.push(match self.z {
+                true => (10 * self.x + self.y) as usize + i,
+                false => (10 * self.y + self.x) as usize + i,
+            });
+        }
+        coordinates
+    }
+
+    /**
+     * Return a vector of the coordinates on the board explicitly ordered X horizontally Y vertically
+     *
+     * @return - vector of ship_type.length() size containing assigned coordinates
+     */
+    pub fn empirical_coordiantes(self) -> Vec<usize> {
+        let length = self.ship_type.length();
+        let mut coordinates = Vec::<usize>::new();
+        for i in 0..length {
+            coordinates.push((10 * self.y + self.x) as usize + i);
+        }
+        coordinates
+    }
+
     /**
      * Export a ship's commitment decomposed to 100 bits
      *
-     * @return - BitArray of 100 booleans representing serialized board state with placement
+     * @return - BitArray booleans representing serialized board state with placement as u256
      */
-    pub fn bits(self) -> ShipBits {
-        let length = self.length();
+    pub fn bits(self) -> Bits {
+        let coordinates = self.coordinates();
         let mut state = bitarr![u64, Lsb0; 0; BOARD_SIZE];
-        for i in 0..length {
-            // compute cell
-            let coordinate = match self.z {
-                true => (10 * self.x + self.y) as usize + i,
-                false => (10 * self.y + self.x) as usize + i,
-            };
+        for coordinate in coordinates {
             state.get_mut(coordinate).unwrap().set(true);
         }
-        let state = state.into_inner();
-        BitArray::<[u64; 4], Lsb0>::from([state[0], state[1], 0, 0])
+        BitArray::<[u64; 4], Lsb0>::from([state.into_inner()[0], state.into_inner()[1], 0, 0])
     }
 }

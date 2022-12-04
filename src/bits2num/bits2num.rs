@@ -6,6 +6,10 @@ use {
         plonk::{Advice, Column, ConstraintSystem, Error, Expression, Selector},
         poly::Rotation,
     },
+    crate::utils::{
+        binary::Bits,
+        board::BOARD_SIZE
+    }
 };
 
 /// Configuration elements for the circuit defined here.
@@ -147,7 +151,6 @@ mod test {
 
     const DEFAULT_BITS: usize = 256; // 256 bit max/ default testing
     const CIRCUIT_SIZE: u32 = 9; // 2^CIRCUIT_SIZE rows used in circuit
-    pub type Bits = BitArray<[u64; 4], Lsb0>; // 256 bit unsigned integer stored in BitArray
 
     #[derive(Clone)]
     struct TestConfig {
@@ -258,10 +261,10 @@ mod test {
         // demonstrate with a carrier ship (length 5) placed vertically at x:4, y: 3
 
         // prepare values to be witnessed by mock circuit
-        let ship = Ship::<{ ShipType::Carrier }>::new(4, 3, true);
+        let ship = Ship::new(ShipType::Carrier, 4, 3, true);
         let bits = ship.bits();
         let value = Fp::from_raw(bits.data);
-
+        
         // use values with bits2num test circuit
         let circuit = TestCircuit::<BOARD_SIZE>::new(value, bits);
         let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();

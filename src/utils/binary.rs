@@ -1,4 +1,6 @@
-use {crate::utils::ship::ShipBits, bitvec::prelude::*, halo2_proofs::arithmetic::FieldExt};
+use {bitvec::prelude::*, halo2_proofs::arithmetic::FieldExt};
+
+pub type Bits = BitArray<[u64; 4], Lsb0>; // 256 bit unsigned integer stored in BitArray
 
 /// Converts given bytes to the bits.
 pub fn bytes2bits<const B: usize>(num: [u8; 32]) -> [bool; B] {
@@ -11,7 +13,7 @@ pub fn bytes2bits<const B: usize>(num: [u8; 32]) -> [bool; B] {
 
 // https://citizen-stig.github.io/2020/04/04/converting-bits-to-integers-in-rust-using-generics.html
 // convert (expected) BitVec of len 100 into u128
-pub fn bits2num(bits: &ShipBits) -> u128 {
+pub fn bits2num(bits: &Bits) -> u128 {
     bits.iter()
         .fold(0, |result, bit| (result << 1) ^ *bit as u128)
 }
