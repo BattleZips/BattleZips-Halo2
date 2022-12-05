@@ -260,7 +260,7 @@ mod test {
         // prepare values to be witnessed by mock circuit
         let ship = Ship::new(ShipType::Carrier, 4, 3, true);
         let bits = ship.bits();
-        let value = Fp::from_raw(bits.into_inner().into_inner());
+        let value = Fp::from_raw(bits.value.into_inner());
 
         // use values with bits2num test circuit
         let circuit = TestCircuit::<BOARD_SIZE>::new(value, bits);

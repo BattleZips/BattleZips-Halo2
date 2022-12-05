@@ -75,7 +75,7 @@ impl Ship {
      * Render ASCII to the console representing the ship placement
      */
     pub fn print(self) {
-        let bits = self.bits().into_inner();
+        let bits = self.bits().value;
         let mut lines = Vec::<String>::new();
         for i in 0..BOARD_SIZE {
             if i % 10 == 0 {
@@ -161,10 +161,9 @@ impl Ship {
      */
     pub fn private_witness(self) -> [BinaryValue; 2] {
         let placement = self.bits();
-        let zero = BinaryValue::new(BitArray::ZERO);
         match self.z {
-            true => [zero, placement],
-            false => [placement, zero],
+            true => [BinaryValue::empty(), placement],
+            false => [placement, BinaryValue::empty()],
         }
     }
 }

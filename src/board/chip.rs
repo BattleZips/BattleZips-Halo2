@@ -1,17 +1,22 @@
 use {
     crate::{
         bits2num::bits2num::{Bits2NumChip, Bits2NumConfig},
-        board::gadget::BoardGadget,
+        board::{
+            gadget::{BoardGadget, Placements, Commitments},
+            primitives::placement::PlacementBits
+        },
         utils::board::BOARD_SIZE,
     },
     halo2_proofs::{
         arithmetic::{lagrange_interpolate, Field, FieldExt},
-        circuit::{AssignedCell, Chip, Layouter, Region},
+        circuit::{AssignedCell, Chip, Layouter, Region, Value},
         plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
         poly::Rotation,
     },
     std::marker::PhantomData,
 };
+
+
 
 /**
  * Contains all storage needed to verify a battleship board
@@ -59,18 +64,20 @@ pub trait BoardInstructions<F: FieldExt> {
         &self,
         layouter: &mut impl Layouter<F>,
         gadget: BoardGadget<F>,
-    ) -> Result<(), Error>;
+    ) -> Result<Commitments<F>, Error>;
 
     /**
      * Load each commitment into a bits2num chip to get constrained 100 bit decompositions
      *
-     * @param gadget - BoardGadget storing cell assignments
+     * @param gadget - BoardGadget functionality
+     * @param commitments - assigned cells of commitments
      */
     fn decompose_commitments(
         &self,
         layouter: &mut impl Layouter<F>,
         gadget: BoardGadget<F>,
-    ) -> Result<(), Error>;
+        commitment: &[AssignedCell<F, F>; 10]
+    ) -> Result<Placements<F>, Error>;
 }
 
 impl<F: FieldExt> BoardChip<F> {
@@ -126,6 +133,9 @@ impl<F: FieldExt> BoardChip<F> {
         mut layouter: impl Layouter<F>,
         gadget: BoardGadget<F>,
     ) -> Result<(), Error> {
+        let commitments = self.load_commitments(&mut layouter, gadget)?;
+        _ = self.decompose_commitments(&mut layouter, gadget, &commitments);
+        Ok(())
     }
 }
 
@@ -134,26 +144,22 @@ impl<F: FieldExt> BoardInstructions<F> for BoardChip<F> {
         &self,
         layouter: &mut impl Layouter<F>,
         gadget: BoardGadget<F>,
-    ) -> Result<[AssignedCell<F, F>; 10], Error> {
-        let commitments = gadget.board.private_witness();
+    ) -> Result<Commitments<F>, Error> {
+        let commitments = gadget.private_witness();
         let assigned: [AssignedCell<F, F>; 10] = layouter.assign_region(
             || "load ship placements",
             |mut region: Region<F>| {
-                for i in 0..commitments.0.len() {
-                    region.assign_advice(
-                        || format!("placement commitment #{}", i),
+                let mut cells = Vec::<AssignedCell<F, F>>::new();
+                for i in 0..10 {
+                    let label = BoardGadget::<F>::commitment_label(i);
+                    cells.push(region.assign_advice(
+                        || format!("{} placement commitment", label),
                         self.config.advice[i],
                         0,
-                        F::from_repr(commitments[i])
-                    )
+                        || Value::known(commitments[i])
+                    )?);
                 }
-                // let sum = region.assign_advice(
-                //     || "sum of h & v placements",
-                //     self.config.advice[0],
-                //     0,
-                //     || sum,
-                // )?;
-                Ok([sum, horizontal_cell.clone(), vertical_cell.clone()])
+                Ok(cells.try_into().unwrap())
             },
         )?;
         Ok(assigned)
@@ -163,6 +169,19 @@ impl<F: FieldExt> BoardInstructions<F> for BoardChip<F> {
         &self,
         layouter: &mut impl Layouter<F>,
         gadget: BoardGadget<F>,
-    ) -> Result<(), Error> {
+        commitments: &[AssignedCell<F, F>; 10]
+    ) -> Result<Placements<F>, Error> {
+        let bits = gadget.decompose_bits();
+        let mut placements = Vec::<PlacementBits<F>>::new();
+        for i in 0..10 {
+            let bits2num = Bits2NumChip::<F, BOARD_SIZE>::new(commitments[i].clone(), bits[i]);
+            let label = BoardGadget::<F>::commitment_label(i);
+            let assigned_bits = bits2num.synthesize(
+                self.config.bits2num[i],
+                layouter.namespace(|| format!("{} bits2num", label))
+            )?;
+            placements.push(PlacementBits::<F>::from(assigned_bits));
+        };
+        Ok(placements.try_into().unwrap())
     }
 }

@@ -3,9 +3,8 @@
 #![feature(inherent_associated_types)]
 #![feature(explicit_generic_args_with_impl_trait)]
 
-// mod board;
 mod utils;
-// mod placement;
+mod placement;
 mod bits2num;
-// mod board;
+mod board;
 // mod transpose;
