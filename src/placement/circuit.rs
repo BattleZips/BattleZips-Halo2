@@ -1,12 +1,18 @@
 #[cfg(test)]
 mod test {
+    use std::fmt::Binary;
+
     use {
         crate::{
+            bits2num::bits2num::{Bits2NumChip, Bits2NumConfig},
             placement::{
                 chip::{PlacementChip, PlacementConfig},
                 gadget::{PlacementGadget, CHIP_SIZE},
             },
-            utils::ship::{PlacementUtilities, ShipPlacement},
+            utils::{
+                ship::{Ship, ShipType},
+                binary::BinaryValue
+            }
         },
         halo2_proofs::{
             arithmetic::FieldExt,
@@ -20,17 +26,19 @@ mod test {
     #[derive(Debug, Clone, Copy)]
     struct TestConfig<const S: usize> {
         pub placement_config: PlacementConfig<Fp, S>,
+        pub bits2num_config: [Bits2NumConfig; 2],
         pub trace: Column<Advice>,
     }
 
     #[derive(Debug, Clone, Copy)]
     struct TestCircuit<const S: usize> {
-        pub gadget: PlacementGadget<Fp, S>,
+        pub values: [BinaryValue; 2],
+        pub gadget: PlacementGadget<Fp>,
     }
 
     impl<const S: usize> TestCircuit<S> {
-        fn new(ship: ShipPlacement<S>) -> TestCircuit<S> {
-            let gadget = PlacementGadget::<Fp, S>::new(ship);
+        fn new(x: BinaryValue, y: BinaryValue) -> TestCircuit<S> {
+            let gadget = PlacementGadget::<Fp>::new(ship);
             TestCircuit { gadget }
         }
 
@@ -49,14 +57,14 @@ mod test {
                 || "placement ship test trace",
                 |mut region| {
                     // compute horizontal and vertical values
-                    let decimal = self.gadget.ship.to_decimal();
+                    let commitment = self.gadget.ship.bits().lower_u128();
                     let horizontal = if self.gadget.ship.z {
                         Value::known(Fp::zero())
                     } else {
-                        Value::known(Fp::from_u128(decimal))
+                        Value::known(Fp::from_u128(commitment))
                     };
                     let vertical = if self.gadget.ship.z {
-                        Value::known(Fp::from_u128(decimal))
+                        Value::known(Fp::from_u128(commitment))
                     } else {
                         Value::known(Fp::zero())
                     };

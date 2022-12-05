@@ -1,11 +1,15 @@
 use {
     crate::{
         bits2num::bits2num::{Bits2NumChip, Bits2NumConfig},
-        board::{
-            gadget::{BoardGadget, Placements, Commitments},
-            primitives::placement::PlacementBits
+        board::gadget::{BoardGadget, Commitments, Placements},
+        placement::{
+            chip::{PlacementChip, PlacementConfig},
+            gadget::{PlacementBits, PlacementGadget}
         },
-        utils::board::BOARD_SIZE,
+        utils::{
+            board::BOARD_SIZE,
+            ship::{Ship, ShipType}
+        }
     },
     halo2_proofs::{
         arithmetic::{lagrange_interpolate, Field, FieldExt},
@@ -16,7 +20,15 @@ use {
     std::marker::PhantomData,
 };
 
-
+// bundles all placement configs together
+#[derive(Clone, Copy, Debug)]
+pub struct PlacementConfigs<F: FieldExt> {
+    carrier: PlacementConfig<F, 5>,
+    battleship: PlacementConfig<F, 4>,
+    cruiser: PlacementConfig<F, 3>,
+    submarine: PlacementConfig<F, 3>,
+    destroyer: PlacementConfig<F, 2>,
+}
 
 /**
  * Contains all storage needed to verify a battleship board
@@ -24,6 +36,7 @@ use {
 #[derive(Clone, Copy, Debug)]
 pub struct BoardConfig<F: FieldExt> {
     pub bits2num: [Bits2NumConfig; 10],
+    pub placement: PlacementConfigs<F>,
     pub advice: [Column<Advice>; 10],
     pub selectors: [Selector; 1],
     _marker: PhantomData<F>,
@@ -76,8 +89,22 @@ pub trait BoardInstructions<F: FieldExt> {
         &self,
         layouter: &mut impl Layouter<F>,
         gadget: BoardGadget<F>,
-        commitment: &[AssignedCell<F, F>; 10]
+        commitment: &[AssignedCell<F, F>; 10],
     ) -> Result<Placements<F>, Error>;
+
+    /**
+     * Load decomposed bits into placement chips
+     * 
+     * @param gadget - BoardGadget with data & utilities
+     * @param placements - references to all assigned cells for bits2num decompositions
+     * @return - Ok if placements were valid, and Errors otherwise
+     */
+    fn synth_placements(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        gadget: BoardGadget<F>,
+        placements: Placements<F>
+    ) -> Result<(), Error>;
 }
 
 impl<F: FieldExt> BoardChip<F> {
@@ -112,11 +139,52 @@ impl<F: FieldExt> BoardChip<F> {
         }
         let bits2num: [Bits2NumConfig; 10] = bits2num.try_into().unwrap();
 
+        // define placement chips
+        let placement = PlacementConfigs {
+            carrier: PlacementChip::<F, 5>::configure(meta),
+            battleship: PlacementChip::<F, 4>::configure(meta),
+            cruiser: PlacementChip::<F, 3>::configure(meta),
+            submarine: PlacementChip::<F, 3>::configure(meta),
+            destroyer: PlacementChip::<F, 2>::configure(meta)
+        };
         // define gates
+        meta.create_gate("Commitment orientation H OR V == 0 constraint", |meta| {
+            let mut commitments = Vec::<Expression<F>>::new();
+            for i in 0..10 {
+                commitments.push(meta.query_advice(advice[i], Rotation::cur()));
+            }
+            let selector = meta.query_selector(selectors[0]);
+            Constraints::with_selector(
+                selector,
+                [
+                    (
+                        "Aircraft Carrier H OR V == 0",
+                        commitments[0].clone() * commitments[1].clone(),
+                    ),
+                    (
+                        "Battleship H OR V == 0",
+                        commitments[2].clone() * commitments[3].clone(),
+                    ),
+                    (
+                        "Cruiser H OR V == 0",
+                        commitments[4].clone() * commitments[5].clone(),
+                    ),
+                    (
+                        "Submarine H OR V == 0",
+                        commitments[6].clone() * commitments[7].clone(),
+                    ),
+                    (
+                        "Destroyer H OR V == 0",
+                        commitments[8].clone() * commitments[9].clone(),
+                    ),
+                ],
+            )
+        });
 
         // return config
         BoardConfig {
             bits2num,
+            placement,
             advice,
             selectors,
             _marker: PhantomData,
@@ -134,7 +202,8 @@ impl<F: FieldExt> BoardChip<F> {
         gadget: BoardGadget<F>,
     ) -> Result<(), Error> {
         let commitments = self.load_commitments(&mut layouter, gadget)?;
-        _ = self.decompose_commitments(&mut layouter, gadget, &commitments);
+        let placements = self.decompose_commitments(&mut layouter, gadget, &commitments)?;
+        _ = self.synth_placements(&mut layouter, gadget, placements);
         Ok(())
     }
 }
@@ -156,9 +225,10 @@ impl<F: FieldExt> BoardInstructions<F> for BoardChip<F> {
                         || format!("{} placement commitment", label),
                         self.config.advice[i],
                         0,
-                        || Value::known(commitments[i])
+                        || Value::known(commitments[i]),
                     )?);
                 }
+                _ = self.config.selectors[0].enable(&mut region, 0);
                 Ok(cells.try_into().unwrap())
             },
         )?;
@@ -169,7 +239,7 @@ impl<F: FieldExt> BoardInstructions<F> for BoardChip<F> {
         &self,
         layouter: &mut impl Layouter<F>,
         gadget: BoardGadget<F>,
-        commitments: &[AssignedCell<F, F>; 10]
+        commitments: &[AssignedCell<F, F>; 10],
     ) -> Result<Placements<F>, Error> {
         let bits = gadget.decompose_bits();
         let mut placements = Vec::<PlacementBits<F>>::new();
@@ -178,10 +248,43 @@ impl<F: FieldExt> BoardInstructions<F> for BoardChip<F> {
             let label = BoardGadget::<F>::commitment_label(i);
             let assigned_bits = bits2num.synthesize(
                 self.config.bits2num[i],
-                layouter.namespace(|| format!("{} bits2num", label))
+                layouter.namespace(|| format!("{} bits2num", label)),
             )?;
             placements.push(PlacementBits::<F>::from(assigned_bits));
-        };
+        }
         Ok(placements.try_into().unwrap())
+    }
+
+    fn synth_placements(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        gadget: BoardGadget<F>,
+        placements: Placements<F>
+    ) -> Result<(), Error> {
+        // synthesize aircraft carrier placement constraint chip
+        let placement_gadget = PlacementGadget::<F>::new(gadget.board.ships[ShipType::Carrier].unwrap());
+        let placement = PlacementChip::<F, 5>::new(self.config.placement.carrier);
+        placement.synthesize(layouter, placement_gadget, placements[0].clone(), placements[1].clone())?;
+
+        // synthesize battleship placement constraint chip
+        let placement_gadget = PlacementGadget::<F>::new(gadget.board.ships[ShipType::Battleship].unwrap());
+        let placement = PlacementChip::<F, 4>::new(self.config.placement.battleship);
+        placement.synthesize(layouter, placement_gadget, placements[2].clone(), placements[4].clone())?;
+
+        // synthesize cruiser placement constraint chip
+        let placement_gadget = PlacementGadget::<F>::new(gadget.board.ships[ShipType::Cruiser].unwrap());
+        let placement = PlacementChip::<F, 3>::new(self.config.placement.cruiser);
+        placement.synthesize(layouter, placement_gadget, placements[4].clone(), placements[5].clone())?;
+
+        // synthesize submarine placement constraint chip
+        let placement_gadget = PlacementGadget::<F>::new(gadget.board.ships[ShipType::Submarine].unwrap());
+        let placement = PlacementChip::<F, 3>::new(self.config.placement.submarine);
+        placement.synthesize(layouter, placement_gadget, placements[6].clone(), placements[7].clone())?;
+
+        // synthesize destroyer placement constraint chip
+        let placement_gadget = PlacementGadget::<F>::new(gadget.board.ships[ShipType::Destroyer].unwrap());
+        let placement = PlacementChip::<F, 2>::new(self.config.placement.destroyer);
+        placement.synthesize(layouter, placement_gadget, placements[8].clone(), placements[9].clone())?;
+        Ok(())
     }
 }

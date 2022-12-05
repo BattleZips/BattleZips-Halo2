@@ -1,6 +1,6 @@
 use {
     crate::{
-        board::primitives::placement::PlacementBits,
+        placement::gadget::PlacementBits,
         utils::{
             binary::BinaryValue,
             board::{Board, BOARD_SIZE},
@@ -94,7 +94,7 @@ impl<F: FieldExt> BoardGadget<F> {
             7 => "V3b",
             8 => "H2",
             9 => "V2",
-            other => "NULL"
+            _other => "NULL"
         })
     }
 }

@@ -145,9 +145,12 @@ impl Ship {
         for coordinate in coordinates {
             state.get_mut(coordinate).unwrap().set(true);
         }
-        BinaryValue::new(
-            BitArray::<[u64; 4], Lsb0>::from([state.into_inner()[0], state.into_inner()[1], 0, 0])
-        )
+        BinaryValue::new(BitArray::<[u64; 4], Lsb0>::from([
+            state.into_inner()[0],
+            state.into_inner()[1],
+            0,
+            0,
+        ]))
     }
 }
 

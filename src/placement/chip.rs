@@ -5,12 +5,12 @@ use {
         placement::gadget::{InstructionUtilities, PlacementBits, PlacementState},
         utils::{
             board::BOARD_SIZE,
-            ship::{PlacementUtilities, ShipPlacement},
+            ship::{Ship, ShipType},
         },
     },
     halo2_proofs::{
         arithmetic::{lagrange_interpolate, FieldExt},
-        circuit::{AssignedCell, Chip, Layouter, Region},
+        circuit::{AssignedCell, Value, Chip, Layouter, Region},
         plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
         poly::Rotation,
     },
@@ -54,31 +54,22 @@ impl<F: FieldExt, const S: usize> Chip<F> for PlacementChip<F, S> {
     }
 }
 pub trait PlacementInstructions<F: FieldExt, const S: usize> {
-    /*
-     * Loads decimal encoding of horizontal placement, vertical placement, and sum of the two
-     * @dev constrains horizontal and vertical to be equal from other region
-     *
-     * @return - reference to assigned cells on which further constraints are performed
-     */
-    fn load_placement(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        horizontal: AssignedCell<F, F>,
-        vertical: AssignedCell<F, F>,
-    ) -> Result<[AssignedCell<F, F>; 3], Error>;
 
     /**
-     * Generate a bits2num region and constrain it to equal a given assigned cell
-     *
-     * @param gadget - contains bit assigments
-     * @param value - assigned call that bits2num should compose to (SUM(H, V))
-     * @return - array of 100 assigned cells representing bits
+     * Copy in horizontal, vertical bits2num decomposition. Sum each bit for H+V to collapse
+     * @dev since H or V is 0 this just permutes in the nonzero decomposition
+     * 
+     * @param gadget - PlacementGadget containing bit values
+     * @param horizontal - assigned cells for bits2num decomposition of horizontal commitment
+     * @param vertical - assigned cells for bits2num decomposition of horizontal commitment
+     * @return - assigned cells where each row is constrained to be sum of H + V bits
      */
-    fn synth_bits2num(
+    fn load_bits(
         &self,
         layouter: &mut impl Layouter<F>,
-        gadget: PlacementGadget<F, S>,
-        value: AssignedCell<F, F>,
+        gadget: PlacementGadget<F>,
+        horizontal: PlacementBits<F>,
+        vertical: PlacementBits<F>
     ) -> Result<PlacementBits<F>, Error>;
 
     /**
@@ -92,7 +83,7 @@ pub trait PlacementInstructions<F: FieldExt, const S: usize> {
         &self,
         layouter: &mut impl Layouter<F>,
         bits: PlacementBits<F>,
-        gadget: PlacementGadget<F, S>,
+        gadget: PlacementGadget<F>,
     ) -> Result<PlacementState<F>, Error>;
 
     /**
@@ -113,9 +104,6 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
         PlacementChip { config }
     }
 
-    /**
-     * Configure the computation space of the circuit & return PlacementConfig
-     */
     pub fn configure(meta: &mut ConstraintSystem<F>) -> PlacementConfig<F, S> {
         // allocate fixed column for constants
         let fixed = meta.fixed_column();
@@ -290,75 +278,66 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
 
     pub fn synthesize(
         &self,
-        mut layouter: impl Layouter<F>,
-        horizontal: AssignedCell<F, F>,
-        vertical: AssignedCell<F, F>,
-        gadget: PlacementGadget<F, S>,
+        layouter: &mut impl Layouter<F>,
+        gadget: PlacementGadget<F>,
+        horizontal: PlacementBits<F>,
+        vertical: PlacementBits<F>,
     ) -> Result<(), Error> {
-        let placement_commitments = self.load_placement(&mut layouter, horizontal, vertical)?;
-        let bits = self.synth_bits2num(&mut layouter, gadget, placement_commitments[0].clone())?;
-        let running_sums = self.placement_sums(&mut layouter, bits, gadget)?;
-        self.assign_constraint(&mut layouter, running_sums)?;
+        let bits = self.load_bits(layouter, gadget, horizontal, vertical)?;
+        let running_sums = self.placement_sums(layouter, bits, gadget)?;
+        self.assign_constraint(layouter, running_sums)?;
         Ok(())
     }
 }
 
 impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<F, S> {
-    fn load_placement(
+    
+    fn load_bits(
         &self,
         layouter: &mut impl Layouter<F>,
-        horizontal: AssignedCell<F, F>,
-        vertical: AssignedCell<F, F>,
-    ) -> Result<[AssignedCell<F, F>; 3], Error> {
-        // variables used to construct witness
-
-        let sum = horizontal.value().copied() + vertical.value().copied();
-        // storage variable for assigned cell holding sum(h, v) to be constrained to bits2num
-        let assigned: [AssignedCell<F, F>; 3] = layouter.assign_region(
-            || "load placement encoded values",
-            |mut region: Region<F>| {
-                _ = self.config.selectors[0].enable(&mut region, 0);
-                let sum = region.assign_advice(
-                    || "sum of h & v placements",
-                    self.config.advice[0],
-                    0,
-                    || sum,
-                )?;
-                let horizontal_cell = horizontal.copy_advice(
-                    || "permute horizontal placement",
-                    &mut region,
-                    self.config.advice[1],
-                    0,
-                )?;
-                let vertical_cell = vertical.copy_advice(
-                    || "permute horizontal placement",
-                    &mut region,
-                    self.config.advice[2],
-                    0,
-                )?;
-                Ok([sum, horizontal_cell.clone(), vertical_cell.clone()])
-            },
-        )?;
-        Ok(assigned)
-    }
-
-    fn synth_bits2num(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        gadget: PlacementGadget<F, S>,
-        value: AssignedCell<F, F>,
+        gadget: PlacementGadget<F>,
+        horizontal: PlacementBits<F>,
+        vertical: PlacementBits<F>
     ) -> Result<PlacementBits<F>, Error> {
-        let bits2num = Bits2NumChip::<F, BOARD_SIZE>::new(value, gadget.bits);
-        let assigned_bits =
-            bits2num.synthesize(self.config.bits2num, layouter.namespace(|| "bits2num"))?;
-        Ok(PlacementBits::<F>::from(assigned_bits))
+        Ok(
+            layouter.assign_region(
+                || "permute and collapse bit decompositions",
+                |mut region: Region<F>| {
+                    let mut assigned = Vec::<AssignedCell<F, F>>::new();
+                    for i in 0..BOARD_SIZE {
+                        _ = self.config.selectors[0].enable(&mut region, i);
+                        let h = horizontal.0[i].copy_advice(
+                            || format!("copy h bit #{}", i),
+                            &mut region,
+                            self.config.advice[0],
+                            i
+                        )?;
+                        let v = vertical.0[i].copy_advice(
+                            || format!("copy v bit #{}", i),
+                            &mut region,
+                            self.config.advice[1],
+                            i
+                        )?;
+                        assigned.push(
+                            region.assign_advice(
+                                || format!("collapse bit #{}", i),
+                                self.config.advice[2],
+                                i,
+                                || Value::known(gadget.bits[i]),
+                            )?
+                        );
+                    };
+                    Ok(PlacementBits::<F>::from(assigned.try_into().unwrap()))
+                }
+            )?
+        )
     }
 
     fn placement_sums(
         &self,
         layouter: &mut impl Layouter<F>,
         bits2num: PlacementBits<F>,
-        gadget: PlacementGadget<F, S>,
+        gadget: PlacementGadget<F>,
     ) -> Result<PlacementState<F>, Error> {
         Ok(layouter.assign_region(
             || "placement running sum trace",

@@ -3,7 +3,7 @@ use {
         placement::chip::PlacementConfig,
         utils::{
             board::BOARD_SIZE,
-            ship::{PlacementUtilities, ShipPlacement},
+            ship::{Ship, ShipType},
         },
     },
     halo2_proofs::{
@@ -17,7 +17,7 @@ pub const CHIP_SIZE: u32 = 7; // circuit requires 2^7 rows
 
 // defines array of 100 assigned bits in a column (little endian)
 #[derive(Clone, Debug)]
-pub struct PlacementBits<F: FieldExt>([AssignedCell<F, F>; BOARD_SIZE]);
+pub struct PlacementBits<F: FieldExt>(pub [AssignedCell<F, F>; BOARD_SIZE]);
 
 impl<F: FieldExt> PlacementBits<F> {
     /**
@@ -55,6 +55,7 @@ impl<F: FieldExt> PlacementBits<F> {
         }
     }
 }
+
 
 // defines storage of final running bit and full bit window sums
 pub struct PlacementState<F: FieldExt> {
@@ -117,7 +118,7 @@ pub trait InstructionUtilities<F: FieldExt> {
         &mut self,
         region: &mut Region<F>,
         config: &PlacementConfig<F, S>,
-        gadget: &PlacementGadget<F, S>,
+        gadget: &PlacementGadget<F>,
     ) -> Result<PlacementState<F>, Error>;
 }
 
@@ -178,7 +179,7 @@ impl<F: FieldExt> InstructionUtilities<F> for PlacementState<F> {
         &mut self,
         region: &mut Region<F>,
         config: &PlacementConfig<F, S>,
-        gadget: &PlacementGadget<F, S>,
+        gadget: &PlacementGadget<F>,
     ) -> Result<PlacementState<F>, Error> {
         // first iteration
         let mut bit_sum_cell = region.assign_advice(
@@ -232,23 +233,25 @@ impl<F: FieldExt> InstructionUtilities<F> for PlacementState<F> {
  * High level gadget used to drive a PlacementChip
  */
 #[derive(Clone, Copy, Debug)]
-pub struct PlacementGadget<F: FieldExt, const S: usize> {
-    pub ship: ShipPlacement<S>, // object constructed from (x, y, z, len) to use ship
-    pub bits: [F; BOARD_SIZE],  // little endian decomposition of placement commitment
+pub struct PlacementGadget<F: FieldExt> {
+    pub ship: Ship,               // object constructed from (x, y, z, len) to use ship
+    pub bits: [F; BOARD_SIZE],    // little endian decomposition of placement commitment
     pub bit_sum: [F; BOARD_SIZE], // running sum of total flipped bits in `bits` array
     pub full_window_sum: [F; BOARD_SIZE], // running sum of total full bit windows of len `S`
 }
 
-impl<F: FieldExt, const S: usize> PlacementGadget<F, S> {
+impl<F: FieldExt> PlacementGadget<F> {
     /**
      * Helper/ private method for assigning trace in gadget
      * @dev not directly called - either called by rational or malicious gadget builder
      *
-     * @param bits - array of bits decomposed in circuit
+     * @param ship - the Ship object with data + utilities
      * @return - array of 2 arrays of length 100 for chip trace
      *     - [bit_sum, full_window_sum]
      */
-    fn assign_trace(bits: &[F; BOARD_SIZE]) -> [[F; BOARD_SIZE]; 2] {
+    fn assign_trace(ship: Ship) -> [[F; BOARD_SIZE]; 2] {
+        let length = ship.ship_type.length();
+        let bits = ship.bits().bitfield::<F, BOARD_SIZE>();
         // compute bit_sum trace
         let mut trace: Vec<F> = Vec::<F>::new();
         trace.push(bits[0]);
@@ -260,10 +263,10 @@ impl<F: FieldExt, const S: usize> PlacementGadget<F, S> {
         // function for returning increment
         // expects permute case check to be done lower in stack
         let increment = |offset: usize| {
-            let bit_count = bits[offset..offset + S]
+            let bit_count = bits[offset..offset + length]
                 .iter()
                 .fold(F::zero(), |sum: F, elem: &F| sum + elem);
-            let v = if bit_count.eq(&F::from(S as u64)) {
+            let v = if bit_count.eq(&F::from(length as u64)) {
                 F::one()
             } else {
                 F::zero()
@@ -274,7 +277,7 @@ impl<F: FieldExt, const S: usize> PlacementGadget<F, S> {
         // compute full bit window trace
         trace = vec![increment(0)];
         for i in 1..bits.len() {
-            if i % 10 + S >= 10 {
+            if i % 10 + length >= 10 {
                 // permute case
                 trace.push(trace[i - 1]);
             } else {
@@ -285,21 +288,21 @@ impl<F: FieldExt, const S: usize> PlacementGadget<F, S> {
         let full_window_sum: [F; BOARD_SIZE] = trace.try_into().unwrap();
         vec![bit_sum, full_window_sum].try_into().unwrap()
     }
+
     /**
      * Given a ShipPlacement object, construct the running sum traces
      *
      * @param ship: ship helper object
      * @return - gadget containing values needed to use PlacementChip
      */
-    pub fn new(ship: ShipPlacement<S>) -> Self {
+    pub fn new(ship: Ship) -> Self {
         // encode ship placement for arithemtization
-        let bits = bits_to_field_elements::<F, BOARD_SIZE>(unwrap_bitvec(ship.to_bits()));
         // build computation trace
-        let trace = PlacementGadget::<F, S>::assign_trace(&bits);
+        let trace = PlacementGadget::<F>::assign_trace(ship);
         // return object
         PlacementGadget {
             ship,
-            bits,
+            bits: ship.bits().bitfield(),
             bit_sum: trace[0],
             full_window_sum: trace[1],
         }
