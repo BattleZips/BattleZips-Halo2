@@ -57,14 +57,10 @@ mod test {
         super::*,
         crate::utils::{
             board::{Board, Deck},
-            ship::{Ship, ShipType},
         },
         halo2_proofs::{
-            arithmetic::FieldExt,
-            circuit::{AssignedCell, Layouter, SimpleFloorPlanner, Value},
-            dev::{CircuitLayout, FailureLocation, MockProver, VerifyFailure},
+            dev::{CircuitLayout, MockProver},
             pasta::Fp,
-            plonk::{Advice, Any, Circuit, Column, ConstraintSystem, Error},
         },
     };
 

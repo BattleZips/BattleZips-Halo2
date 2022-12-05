@@ -6,8 +6,7 @@ use {
             board::{Board, BOARD_SIZE},
         },
     },
-    bitvec::prelude::*,
-    halo2_proofs::{arithmetic::FieldExt, circuit::AssignedCell, pasta::Fp},
+    halo2_proofs::{arithmetic::FieldExt, circuit::AssignedCell},
     std::marker::PhantomData,
 };
 

@@ -8,11 +8,11 @@ use {
         },
         utils::{
             board::BOARD_SIZE,
-            ship::{Ship, ShipType}
+            ship::{ShipType}
         }
     },
     halo2_proofs::{
-        arithmetic::{lagrange_interpolate, Field, FieldExt},
+        arithmetic::{FieldExt},
         circuit::{AssignedCell, Chip, Layouter, Region, Value},
         plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
         poly::Rotation,
@@ -105,6 +105,8 @@ pub trait BoardInstructions<F: FieldExt> {
         gadget: BoardGadget<F>,
         placements: Placements<F>
     ) -> Result<(), Error>;
+
+    // fn synth_transpose;
 }
 
 impl<F: FieldExt> BoardChip<F> {

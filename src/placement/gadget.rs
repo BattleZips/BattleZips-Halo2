@@ -3,7 +3,7 @@ use {
         placement::chip::PlacementConfig,
         utils::{
             board::BOARD_SIZE,
-            ship::{Ship, ShipType},
+            ship::{Ship},
         },
     },
     halo2_proofs::{

@@ -7,4 +7,4 @@ mod utils;
 mod placement;
 mod bits2num;
 mod board;
-// mod transpose;
+mod transpose;

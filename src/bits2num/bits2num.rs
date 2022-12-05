@@ -1,5 +1,4 @@
 use {
-    crate::utils::{binary::BinaryValue, board::BOARD_SIZE},
     bitvec::prelude::*,
     halo2_proofs::{
         arithmetic::FieldExt,
@@ -137,7 +136,11 @@ impl<F: FieldExt, const B: usize> Bits2NumChip<F, B> {
 mod test {
     use {
         super::*,
-        crate::utils::{board::BOARD_SIZE, ship::*},
+        crate::utils::{
+            board::BOARD_SIZE,
+            ship::*,
+            binary::BinaryValue,
+        },
         halo2_proofs::{
             circuit::SimpleFloorPlanner,
             dev::{metadata, CircuitLayout, FailureLocation, MockProver, VerifyFailure},

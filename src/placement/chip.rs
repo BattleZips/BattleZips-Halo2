@@ -5,7 +5,6 @@ use {
         placement::gadget::{InstructionUtilities, PlacementBits, PlacementState},
         utils::{
             board::BOARD_SIZE,
-            ship::{Ship, ShipType},
         },
     },
     halo2_proofs::{
@@ -31,7 +30,6 @@ use {
  */
 #[derive(Clone, Copy, Debug)]
 pub struct PlacementConfig<F: FieldExt, const S: usize> {
-    pub bits2num: Bits2NumConfig,
     pub advice: [Column<Advice>; 3],
     pub selectors: [Selector; 5],
     _marker: PhantomData<F>,
@@ -124,9 +122,6 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
             selectors.push(meta.selector());
         }
         let selectors: [Selector; 5] = selectors.try_into().unwrap();
-
-        // define bits2num config
-        let bits2num = Bits2NumChip::<_, BOARD_SIZE>::configure(meta);
 
         // selector[0] gate: placement commitment constraint
         meta.create_gate("horizontal/ vertical placement constraint", |meta| {
@@ -269,7 +264,6 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
 
         // export config
         PlacementConfig {
-            bits2num,
             advice,
             selectors,
             _marker: PhantomData,
