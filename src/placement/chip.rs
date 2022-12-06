@@ -300,13 +300,13 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
                     let mut assigned = Vec::<AssignedCell<F, F>>::new();
                     for i in 0..BOARD_SIZE {
                         _ = self.config.selectors[0].enable(&mut region, i);
-                        let h = horizontal.0[i].copy_advice(
+                        _ = horizontal.0[i].copy_advice(
                             || format!("copy h bit #{}", i),
                             &mut region,
                             self.config.advice[0],
                             i
                         )?;
-                        let v = vertical.0[i].copy_advice(
+                        _ = vertical.0[i].copy_advice(
                             || format!("copy v bit #{}", i),
                             &mut region,
                             self.config.advice[1],

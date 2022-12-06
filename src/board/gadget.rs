@@ -10,8 +10,8 @@ use {
     std::marker::PhantomData,
 };
 
-pub type Commitments<F: FieldExt> = [AssignedCell<F, F>; 10];
-pub type Placements<F: FieldExt> = [PlacementBits<F>; 10];
+pub type Commitments<F> = [AssignedCell<F, F>; 11];
+pub type Placements<F> = [PlacementBits<F>; 10];
 
 // private inputs to the witness during proving
 pub struct PrivateInput(pub [BinaryValue; 10]); // array of horizontal/ vertical decomposed placement commitments

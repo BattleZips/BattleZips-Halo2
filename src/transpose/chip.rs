@@ -167,12 +167,13 @@ impl<F: FieldExt> TransposeChip<F> {
         layouter: &mut impl Layouter<F>,
         commitment: AssignedCell<F, F>,
         bits: [F; BOARD_SIZE],
-        placements: Placements<F>
+        placements: Placements<F>,
     ) -> Result<AssignedCell<F, F>, Error> {
+        println!("1");
         let transposed = self.permute_bits2num(layouter, placements, bits)?;
-        Ok(
-            self.constrain_transposed(layouter, commitment, transposed, bits)?
-        )
+        println!("2: {:?}", transposed);
+        // Ok(self.constrain_transposed(layouter, commitment, transposed, bits)?)
+        Ok(commitment.clone())
     }
 }
 
@@ -183,15 +184,15 @@ impl<F: FieldExt> TransposeInstructions<F> for TransposeChip<F> {
         placements: Placements<F>,
         transposed: [F; BOARD_SIZE],
     ) -> Result<PlacementBits<F>, Error> {
-        Ok(layouter.assign_region(
+        let assigned = layouter.assign_region(
             || "Transpose ship commitments",
-            |mut region| {
+            |mut region: Region<F>| {
                 // permute from bits2num chips
                 for i in 0..10 {
                     for j in 0..BOARD_SIZE {
                         let transposed_index = if i % 2 == 1 { j % 10 * 10 + j / 10 } else { j };
                         let orientation = if i % 2 == 1 { "vertical" } else { "horizontal" };
-                        placements[i].0[transposed_index].copy_advice(
+                        placements[i].0[transposed_index].clone().copy_advice(
                             || format!("permute {} ship {} bit {}", orientation, i / 2, j),
                             &mut region,
                             self.config.advice[i],
@@ -206,14 +207,18 @@ impl<F: FieldExt> TransposeInstructions<F> for TransposeChip<F> {
                         || format!("assign tranposed bit {}", i),
                         self.config.advice[10],
                         i,
-                        || Value::known(transposed[i]),
+                        || Value::known(transposed[i].clone()),
                     )?);
                     // toggle transposed row constraint
                     _ = self.config.selectors[0].enable(&mut region, i);
-                }
-                Ok(PlacementBits::<F>::from(assigned.try_into().unwrap()))
+                };
+                Ok(())
             },
-        )?)
+        )?;
+        println!("assigned: {:?}", assigned);
+        // let x = PlacementBits::<F>::from(assigned.clone().try_into().unwrap());
+        // println!("placementbits: {:?}", x)
+        Ok(placements[0].clone())
     }
 
     fn constrain_transposed(
@@ -223,13 +228,16 @@ impl<F: FieldExt> TransposeInstructions<F> for TransposeChip<F> {
         transposed: PlacementBits<F>,
         transposed_bits: [F; BOARD_SIZE],
     ) -> Result<AssignedCell<F, F>, Error> {
+        println!("1!");
         let bits2num = Bits2NumChip::<F, BOARD_SIZE>::new(commitment.clone(), transposed_bits);
+        println!("2");
         let decomposed = bits2num
             .synthesize(
                 self.config.bits2num,
                 layouter.namespace(|| "decompose transposed commitment"),
             )
             .unwrap();
+        println!("3 {:?}", decomposed.clone());
         _ = layouter.assign_region(
             || "constrain transposed commitment",
             |mut region| {
@@ -255,6 +263,7 @@ impl<F: FieldExt> TransposeInstructions<F> for TransposeChip<F> {
                 Ok(())
             },
         );
+        println!("4 {:?}", commitment.clone().value());
         Ok(commitment.clone())
     }
 }
