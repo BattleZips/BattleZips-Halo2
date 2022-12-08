@@ -18,6 +18,7 @@ use {
         plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
         poly::Rotation,
     },
+    halo2_gadgets::poseidon::{Pow5Chip, Pow5Config}
     std::marker::PhantomData,
 };
 
@@ -39,6 +40,7 @@ pub struct BoardConfig<F: FieldExt> {
     pub num2bits: [BitifyConfig; 10],
     pub placement: PlacementConfigs<F>,
     pub transpose: TransposeConfig<F>,
+    pub poseidon: Pow5Config<F, 3, 2>,
     pub advice: [Column<Advice>; 10],
     pub selectors: [Selector; 1],
     _marker: PhantomData<F>,
@@ -167,6 +169,9 @@ impl<F: FieldExt> BoardChip<F> {
 
         // define transpose chip
         let transpose = TransposeChip::<F>::configure(meta);
+
+        // define poseidon chip
+        let poseidon = Pow5Chip::<F, 3, 2>::config(meta, state, partial_sbox, rc_a, rc_b)
 
         // define gates
         meta.create_gate("Commitment orientation H OR V == 0 constraint", |meta| {

@@ -6,5 +6,5 @@
 mod utils;
 mod placement;
 mod bitify;
-mod board;
-mod transpose;
+// mod board;
+// mod transpose;

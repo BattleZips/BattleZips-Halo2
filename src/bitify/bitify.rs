@@ -3,7 +3,9 @@ use {
     halo2_proofs::{
         arithmetic::FieldExt,
         circuit::{AssignedCell, Layouter, Region, Value},
-        plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
+        plonk::{
+            Advice, Column, ConstraintSystem, Constraints, Error, Expression, Fixed, Selector,
+        },
         poly::Rotation,
     },
 };
@@ -17,6 +19,8 @@ pub struct BitifyConfig {
     lc1: Column<Advice>,
     /// Configures a column for the e2.
     e2: Column<Advice>,
+    /// Constant column
+    fixed: Column<Fixed>,
     /// Configures a fixed boolean value for each row of the circuit.
     selector: Selector,
 }
@@ -50,17 +54,14 @@ impl<F: FieldExt, const B: usize> Num2BitsChip<F, B> {
     }
 
     /// Make the circuit config.
-    pub fn configure(meta: &mut ConstraintSystem<F>) -> BitifyConfig {
-        let bits = meta.advice_column();
-        let lc1 = meta.advice_column();
-        let e2 = meta.advice_column();
-        let fixed = meta.fixed_column();
-        let s = meta.selector();
-
-        meta.enable_equality(bits);
-        meta.enable_equality(lc1);
-        meta.enable_equality(e2);
-        meta.enable_constant(fixed);
+    pub fn configure(
+        meta: &mut ConstraintSystem<F>,
+        bits: Column<Advice>,
+        lc1: Column<Advice>,
+        e2: Column<Advice>,
+        fixed: Column<Fixed>,
+    ) -> BitifyConfig {
+        let selector = meta.selector();
 
         meta.create_gate("num2bits", |meta| {
             let one = Expression::Constant(F::one());
@@ -72,7 +73,7 @@ impl<F: FieldExt, const B: usize> Num2BitsChip<F, B> {
             let lc1_exp = meta.query_advice(lc1, Rotation::cur());
             let lc1_next = meta.query_advice(lc1, Rotation::next());
 
-            let selector = meta.query_selector(s);
+            let selector = meta.query_selector(selector);
 
             Constraints::with_selector(
                 selector,
@@ -97,7 +98,8 @@ impl<F: FieldExt, const B: usize> Num2BitsChip<F, B> {
             bits,
             lc1,
             e2,
-            selector: s,
+            selector,
+            fixed,
         }
     }
 
@@ -149,57 +151,51 @@ impl<F: FieldExt, const B: usize> Bits2NumChip<F, B> {
     }
 
     /// Make the circuit config.
-    pub fn configure(meta: &mut ConstraintSystem<F>) -> BitifyConfig {
-        let bits = meta.advice_column();
-        let lc1 = meta.advice_column();
-        let e2 = meta.advice_column();
-        let fixed = meta.fixed_column();
-        let s = meta.selector();
+    pub fn configure(
+        meta: &mut ConstraintSystem<F>,
+        bits: Column<Advice>,
+        lc1: Column<Advice>,
+        e2: Column<Advice>,
+        fixed: Column<Fixed>,
+    ) -> BitifyConfig {
+        let selector = meta.selector();
+        meta.create_gate("bits2num", |meta| {
+            let one = Expression::Constant(F::one());
+            let bit = meta.query_advice(bits, Rotation::cur());
 
-        meta.enable_equality(bits);
-        meta.enable_equality(lc1);
-        meta.enable_equality(e2);
-        meta.enable_constant(fixed);
+            let e2_exp = meta.query_advice(e2, Rotation::cur());
+            let e2_next = meta.query_advice(e2, Rotation::next());
 
-        meta.create_gate("num2bits", |v_cells| {
-            let one_exp = Expression::Constant(F::one());
-            let bit_exp = v_cells.query_advice(bits, Rotation::cur());
+            let lc1_exp = meta.query_advice(lc1, Rotation::cur());
+            let lc1_next = meta.query_advice(lc1, Rotation::next());
 
-            let e2_exp = v_cells.query_advice(e2, Rotation::cur());
-            let e2_next_exp = v_cells.query_advice(e2, Rotation::next());
+            let selector = meta.query_selector(selector);
 
-            let lc1_exp = v_cells.query_advice(lc1, Rotation::cur());
-            let lc1_next_exp = v_cells.query_advice(lc1, Rotation::next());
-
-            let s_exp = v_cells.query_selector(s);
-
-            vec![
-                // bit * (1 - bit) == 0
-                // Constraining bit to be a boolean.
-                s_exp.clone() * (bit_exp.clone() * (one_exp - bit_exp.clone())),
-                // e2 + e2 == e2_next
-                // Starting from 1, doubling.
-                s_exp.clone() * ((e2_exp.clone() + e2_exp.clone()) - e2_next_exp),
-                // lc1 + bit * e2 == lc1_next
-                // If the bit is equal to 1, e2 will be added to the sum.
-                // Example:
-                // bit = 1
-                // e2 = 1 (first rotation)
-                // lc1 = 0
-                // If the bit == 1, double the e2.
-                // This will be used in the next rotation, if bit == 1 again. (e2_next = 1 + 1 = 2)
-                //
-                // Check the constraint => (1 * 1 + 0)
-                // lc1_next = 1
-                s_exp * ((bit_exp * e2_exp + lc1_exp) - lc1_next_exp),
-            ]
+            Constraints::with_selector(
+                selector,
+                [
+                    (
+                        "Constrain bit is boolean",
+                        bit.clone() * (one - bit.clone()),
+                    ),
+                    (
+                        "Start from 1, doubling",
+                        e2_exp.clone() + e2_exp.clone() - e2_next.clone(),
+                    ),
+                    (
+                        "If bit is 1, e2 added to sum",
+                        bit.clone() * e2_exp.clone() + lc1_exp.clone() - lc1_next.clone(),
+                    ),
+                ],
+            )
         });
 
         BitifyConfig {
             bits,
             lc1,
             e2,
-            selector: s,
+            selector,
+            fixed,
         }
     }
 
@@ -257,7 +253,10 @@ mod test {
     #[derive(Clone)]
     struct TestBitifyConfig {
         bitify: BitifyConfig,
-        trace: Column<Advice>,
+        bits: Column<Advice>,
+        lc1: Column<Advice>,
+        e2: Column<Advice>,
+        fixed: Column<Fixed>,
     }
 
     #[derive(Debug, Clone)]
@@ -293,12 +292,29 @@ mod test {
         }
 
         fn configure(meta: &mut ConstraintSystem<Fp>) -> TestBitifyConfig {
-            let bitify = Num2BitsChip::<_, DEFAULT_BITS>::configure(meta);
+            // create circuit columns
+            let bits = meta.advice_column();
+            let lc1 = meta.advice_column();
+            let e2 = meta.advice_column();
+            let fixed = meta.fixed_column();
+
+            meta.enable_equality(bits);
+            meta.enable_equality(lc1);
+            meta.enable_equality(e2);
+            meta.enable_constant(fixed);
+            // configure chip with columns
+            let bitify = Num2BitsChip::<_, DEFAULT_BITS>::configure(meta, bits, lc1, e2, fixed);
             let trace = meta.advice_column();
 
             meta.enable_equality(trace);
 
-            TestBitifyConfig { bitify, trace }
+            TestBitifyConfig {
+                bitify,
+                bits,
+                lc1,
+                e2,
+                fixed,
+            }
         }
 
         fn synthesize(
@@ -309,7 +325,7 @@ mod test {
             let value = layouter.assign_region(
                 || "trace",
                 |mut region: Region<'_, Fp>| {
-                    region.assign_advice(|| "value", config.trace, 0, || Value::known(self.value))
+                    region.assign_advice(|| "value", config.bits, 0, || Value::known(self.value))
                 },
             )?;
             let bits = self.binary.bitfield::<Fp, B>();
@@ -330,12 +346,30 @@ mod test {
         }
 
         fn configure(meta: &mut ConstraintSystem<Fp>) -> TestBitifyConfig {
-            let bitify = Bits2NumChip::<_, DEFAULT_BITS>::configure(meta);
+            // create circuit columns
+            let bits = meta.advice_column();
+            let lc1 = meta.advice_column();
+            let e2 = meta.advice_column();
+            let fixed = meta.fixed_column();
+
+            meta.enable_equality(bits);
+            meta.enable_equality(lc1);
+            meta.enable_equality(e2);
+            meta.enable_constant(fixed);
+
+            // configure chip with columns
+            let bitify = Bits2NumChip::<_, DEFAULT_BITS>::configure(meta, bits, lc1, e2, fixed);
             let trace = meta.advice_column();
 
             meta.enable_equality(trace);
 
-            TestBitifyConfig { bitify, trace }
+            TestBitifyConfig {
+                bitify,
+                bits,
+                lc1,
+                e2,
+                fixed,
+            }
         }
 
         fn synthesize(
@@ -351,7 +385,7 @@ mod test {
                     for i in 0..B {
                         assigned.push(region.assign_advice(
                             || "bit",
-                            config.trace,
+                            config.bits,
                             i,
                             || Value::known(bits[i]),
                         )?);
@@ -373,7 +407,7 @@ mod test {
         let value = Fp::from(1311768467294899695u64);
         let circuit =
             Num2BitsCircuit::<DEFAULT_BITS>::new(value, BinaryValue::new(value.to_le_bits()));
-        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
+        let prover = MockProver::run(9, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -383,7 +417,7 @@ mod test {
         let value = Fp::from(1311768467294899695u64);
         let circuit =
             Bits2NumCircuit::<DEFAULT_BITS>::new(value, BinaryValue::new(value.to_le_bits()));
-        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
+        let prover = MockProver::run(10, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -393,7 +427,7 @@ mod test {
         let value = Fp::zero().sub(&Fp::one());
         let circuit =
             Num2BitsCircuit::<DEFAULT_BITS>::new(value, BinaryValue::new(value.to_le_bits()));
-        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
+        let prover = MockProver::run(9, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -403,7 +437,7 @@ mod test {
         let value = Fp::zero().sub(&Fp::one());
         let circuit =
             Bits2NumCircuit::<DEFAULT_BITS>::new(value, BinaryValue::new(value.to_le_bits()));
-        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
+        let prover = MockProver::run(10, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -419,7 +453,7 @@ mod test {
         ];
         let bits = BitArray::<[u64; 4], Lsb0>::new(value_u256);
         let circuit = Num2BitsCircuit::<DEFAULT_BITS>::new(Fp::zero(), BinaryValue::new(bits));
-        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
+        let prover = MockProver::run(9, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -435,7 +469,7 @@ mod test {
         ];
         let bits = BitArray::<[u64; 4], Lsb0>::new(value_u256);
         let circuit = Bits2NumCircuit::<DEFAULT_BITS>::new(Fp::zero(), BinaryValue::new(bits));
-        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
+        let prover = MockProver::run(10, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -444,7 +478,7 @@ mod test {
         // Testing zero as value with 254 bits.
         let value = Fp::zero();
         let circuit = Num2BitsCircuit::<254>::new(value, BinaryValue::new(value.to_le_bits()));
-        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
+        let prover = MockProver::run(9, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -453,7 +487,7 @@ mod test {
         // Testing zero as value with 254 bits.
         let value = Fp::zero();
         let circuit = Bits2NumCircuit::<254>::new(value, BinaryValue::new(value.to_le_bits()));
-        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
+        let prover = MockProver::run(10, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -474,22 +508,22 @@ mod test {
 
         // // check that value fails if value is incremented
         let circuit = Num2BitsCircuit::<BOARD_SIZE>::new(value + Fp::one(), bits);
-        let prover = MockProver::run(CIRCUIT_SIZE, &circuit, vec![]).unwrap();
+        let prover = MockProver::run(9, &circuit, vec![]).unwrap();
         assert_eq!(
             prover.verify(),
             Err(vec![
+                VerifyFailure::Permutation {
+                    column: metadata::Column::from((Any::Advice, 0)),
+                    location: FailureLocation::InRegion {
+                        region: (0, "trace").into(),
+                        offset: 0
+                    }
+                },
                 VerifyFailure::Permutation {
                     column: metadata::Column::from((Any::Advice, 1)),
                     location: FailureLocation::InRegion {
                         region: (1, "num2bits").into(),
                         offset: 100
-                    }
-                },
-                VerifyFailure::Permutation {
-                    column: metadata::Column::from((Any::Advice, 3)),
-                    location: FailureLocation::InRegion {
-                        region: (0, "trace").into(),
-                        offset: 0
                     }
                 }
             ])
@@ -517,7 +551,7 @@ mod test {
             .show_labels(false)
             // Render the circuit onto your area!
             // The first argument is the size parameter for the circuit.
-            .render(8, &circuit, &root)
+            .render(9, &circuit, &root)
             .unwrap();
     }
 
