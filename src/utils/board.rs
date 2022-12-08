@@ -1,6 +1,6 @@
 use {
     crate::{
-        // board::gadget::PrivateInput,
+        board::gadget::PrivateInput,
         utils::{
             binary::BinaryValue,
             ship::{Ship, ShipType},
@@ -208,26 +208,26 @@ impl Board {
         collision
     }
 
-    // /**
-    //  * Generates the private witness input representing the board
-    //  *
-    //  * @return
-    //  */
-    // pub fn private_witness(self) -> PrivateInput {
-    //     let mut full_witness = Vec::<BinaryValue>::new();
-    //     for ship in self.ships.iterator() {
-    //         let witness = if ship.is_none() {
-    //             [BinaryValue::empty(), BinaryValue::empty()]
-    //         } else {
-    //             ship.unwrap().private_witness()
-    //         };
-    //         full_witness.push(witness[0]);
-    //         full_witness.push(witness[1]);
-    //     }
-    //     PrivateInput {
-    //         0: full_witness.try_into().unwrap(),
-    //     }
-    // }
+    /**
+     * Generates the private witness input representing the board
+     *
+     * @return
+     */
+    pub fn private_witness(self) -> PrivateInput {
+        let mut full_witness = Vec::<BinaryValue>::new();
+        for ship in self.ships.iterator() {
+            let witness = if ship.is_none() {
+                [BinaryValue::empty(), BinaryValue::empty()]
+            } else {
+                ship.unwrap().private_witness()
+            };
+            full_witness.push(witness[0]);
+            full_witness.push(witness[1]);
+        }
+        PrivateInput {
+            0: full_witness.try_into().unwrap(),
+        }
+    }
 
     /**
      * Render ASCII to the console representing the ship placement

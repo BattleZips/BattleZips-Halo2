@@ -1,6 +1,6 @@
 use {
     crate::{
-        placement::gadget::PlacementBits,
+        placement::primitives::PlacementBits,
         utils::{
             binary::BinaryValue,
             board::{Board, BOARD_SIZE},

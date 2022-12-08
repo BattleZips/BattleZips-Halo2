@@ -1,24 +1,26 @@
 use {
     crate::{
-        bitify::bitify::{Num2BitsChip, BitifyConfig},
+        bitify::bitify::{BitifyConfig, Num2BitsChip},
         board::gadget::{BoardGadget, Commitments, Placements},
-        transpose::chip::{TransposeChip, TransposeConfig},
         placement::{
             chip::{PlacementChip, PlacementConfig},
-            gadget::{PlacementBits, PlacementGadget}
+            primitives::PlacementBits,
         },
+        transpose::chip::{TransposeChip, TransposeConfig},
         utils::{
-            board::BOARD_SIZE,
-            ship::{ShipType}
-        }
+            board::{Deck, BOARD_SIZE},
+            ship::ShipType,
+        },
     },
+    halo2_gadgets::poseidon::{Pow5Chip, Pow5Config},
     halo2_proofs::{
-        arithmetic::{FieldExt},
+        arithmetic::FieldExt,
         circuit::{AssignedCell, Chip, Layouter, Region, Value},
-        plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
+        plonk::{
+            Advice, Column, ConstraintSystem, Constraints, Error, Expression, Fixed, Selector,
+        },
         poly::Rotation,
     },
-    halo2_gadgets::poseidon::{Pow5Chip, Pow5Config}
     std::marker::PhantomData,
 };
 
@@ -35,13 +37,13 @@ pub struct PlacementConfigs<F: FieldExt> {
 /**
  * Contains all storage needed to verify a battleship board
  */
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct BoardConfig<F: FieldExt> {
     pub num2bits: [BitifyConfig; 10],
     pub placement: PlacementConfigs<F>,
     pub transpose: TransposeConfig<F>,
-    pub poseidon: Pow5Config<F, 3, 2>,
-    pub advice: [Column<Advice>; 10],
+    pub advice: [Column<Advice>; 11],
+    pub fixed: [Column<Fixed>; 1],
     pub selectors: [Selector; 1],
     _marker: PhantomData<F>,
 }
@@ -99,31 +101,31 @@ pub trait BoardInstructions<F: FieldExt> {
 
     /**
      * Load decomposed bits into placement chips
-     * 
-     * @param gadget - BoardGadget with data & utilities
+     *
+     * @param ships - deck of ship placements
      * @param placements - references to all assigned cells for bits2num decompositions
      * @return - Ok if placements were valid, and Errors otherwise
      */
     fn synth_placements(
         &self,
         layouter: &mut impl Layouter<F>,
-        gadget: BoardGadget<F>,
-        placements: Placements<F>
+        ships: Deck,
+        placements: Placements<F>,
     ) -> Result<(), Error>;
 
     /**
      * Transpose ship placement bit decompositions into a single board and recompose into a single commitment
-     * 
+     *
      * @param gadget - board gadget
      * @param placements - reference to assigned cells of bits2num decomposed ship commitments
-     * @return - reference to assigned cell of constrained calculated board commitment from ship inputs
+     * @return - reference to transposed binary decomposition representing board commitment
      */
     fn transpose_placements(
         &self,
         layouter: &mut impl Layouter<F>,
         gadget: BoardGadget<F>,
-        placements: Placements<F>
-    ) -> Result<AssignedCell<F, F>, Error>;
+        placements: Placements<F>,
+    ) -> Result<PlacementBits<F>, Error>;
 }
 
 impl<F: FieldExt> BoardChip<F> {
@@ -137,12 +139,21 @@ impl<F: FieldExt> BoardChip<F> {
     pub fn configure(meta: &mut ConstraintSystem<F>) -> BoardConfig<F> {
         // define advice
         let mut advice = Vec::<Column<Advice>>::new();
-        for _ in 0..10 {
+        for _ in 0..11 {
             let col = meta.advice_column();
             meta.enable_equality(col);
             advice.push(col);
         }
-        let advice: [Column<Advice>; 10] = advice.try_into().unwrap();
+        let advice: [Column<Advice>; 11] = advice.try_into().unwrap();
+
+        // define fixed
+        let mut fixed = Vec::<Column<Fixed>>::new();
+        for _ in 0..1 {
+            let col = meta.fixed_column();
+            meta.enable_constant(col);
+            fixed.push(col);
+        }
+        let fixed: [Column<Fixed>; 1] = fixed.try_into().unwrap();
 
         // define selectors
         let mut selectors = Vec::<Selector>::new();
@@ -154,24 +165,37 @@ impl<F: FieldExt> BoardChip<F> {
         // define bits2num chips
         let mut num2bits = Vec::<BitifyConfig>::new();
         for _ in 0..10 {
-            num2bits.push(Num2BitsChip::<_, BOARD_SIZE>::configure(meta));
+            num2bits.push(Num2BitsChip::<_, BOARD_SIZE>::configure(
+                meta, advice[0], advice[1], advice[2], fixed[0],
+            ));
         }
         let num2bits: [BitifyConfig; 10] = num2bits.try_into().unwrap();
 
         // define placement chips
         let placement = PlacementConfigs {
-            carrier: PlacementChip::<F, 5>::configure(meta),
-            battleship: PlacementChip::<F, 4>::configure(meta),
-            cruiser: PlacementChip::<F, 3>::configure(meta),
-            submarine: PlacementChip::<F, 3>::configure(meta),
-            destroyer: PlacementChip::<F, 2>::configure(meta)
+            carrier: PlacementChip::<F, 5>::configure(
+                meta, advice[0], advice[1], advice[2], fixed[0],
+            ),
+            battleship: PlacementChip::<F, 4>::configure(
+                meta, advice[0], advice[1], advice[2], fixed[0],
+            ),
+            cruiser: PlacementChip::<F, 3>::configure(
+                meta, advice[0], advice[1], advice[2], fixed[0],
+            ),
+            submarine: PlacementChip::<F, 3>::configure(
+                meta, advice[0], advice[1], advice[2], fixed[0],
+            ),
+            destroyer: PlacementChip::<F, 2>::configure(
+                meta, advice[0], advice[1], advice[2], fixed[0],
+            ),
         };
 
         // define transpose chip
-        let transpose = TransposeChip::<F>::configure(meta);
+        let transpose =
+            TransposeChip::<F>::configure(meta, advice[0..10].try_into().unwrap(), advice[10]);
 
         // define poseidon chip
-        let poseidon = Pow5Chip::<F, 3, 2>::config(meta, state, partial_sbox, rc_a, rc_b)
+        // let poseidon = Pow5Chip::<F, 3, 2>::config(meta, state, partial_sbox, rc_a, rc_b)
 
         // define gates
         meta.create_gate("Commitment orientation H OR V == 0 constraint", |meta| {
@@ -213,6 +237,7 @@ impl<F: FieldExt> BoardChip<F> {
             placement,
             transpose,
             advice,
+            fixed,
             selectors,
             _marker: PhantomData,
         }
@@ -230,9 +255,8 @@ impl<F: FieldExt> BoardChip<F> {
     ) -> Result<(), Error> {
         let commitments = self.load_commitments(&mut layouter, gadget)?;
         let placements = self.decompose_commitments(&mut layouter, gadget, &commitments)?;
-        self.synth_placements(&mut layouter, gadget, placements.clone())?;
+        self.synth_placements(&mut layouter, gadget.board.ships, placements.clone())?;
         let transposed = self.transpose_placements(&mut layouter, gadget, placements.clone())?;
-        println!("Transposed: {:?}", transposed.clone().value());
         Ok(())
     }
 }
@@ -288,33 +312,39 @@ impl<F: FieldExt> BoardInstructions<F> for BoardChip<F> {
     fn synth_placements(
         &self,
         layouter: &mut impl Layouter<F>,
-        gadget: BoardGadget<F>,
-        placements: Placements<F>
+        ships: Deck,
+        placements: Placements<F>,
     ) -> Result<(), Error> {
-        // synthesize aircraft carrier placement constraint chip
-        let placement_gadget = PlacementGadget::<F>::new(gadget.board.ships[ShipType::Carrier].unwrap());
-        let placement = PlacementChip::<F, 5>::new(self.config.placement.carrier);
-        placement.synthesize(layouter, placement_gadget, placements[0].clone(), placements[1].clone())?;
-
-        // synthesize battleship placement constraint chip
-        let placement_gadget = PlacementGadget::<F>::new(gadget.board.ships[ShipType::Battleship].unwrap());
-        let placement = PlacementChip::<F, 4>::new(self.config.placement.battleship);
-        placement.synthesize(layouter, placement_gadget, placements[2].clone(), placements[3].clone())?;
-
-        // synthesize cruiser placement constraint chip
-        let placement_gadget = PlacementGadget::<F>::new(gadget.board.ships[ShipType::Cruiser].unwrap());
-        let placement = PlacementChip::<F, 3>::new(self.config.placement.cruiser);
-        placement.synthesize(layouter, placement_gadget, placements[4].clone(), placements[5].clone())?;
-
-        // synthesize submarine placement constraint chip
-        let placement_gadget = PlacementGadget::<F>::new(gadget.board.ships[ShipType::Submarine].unwrap());
-        let placement = PlacementChip::<F, 3>::new(self.config.placement.submarine);
-        placement.synthesize(layouter, placement_gadget, placements[6].clone(), placements[7].clone())?;
-
-        // synthesize destroyer placement constraint chip
-        let placement_gadget = PlacementGadget::<F>::new(gadget.board.ships[ShipType::Destroyer].unwrap());
-        let placement = PlacementChip::<F, 2>::new(self.config.placement.destroyer);
-        placement.synthesize(layouter, placement_gadget, placements[8].clone(), placements[9].clone())?;
+        PlacementChip::<F, 5>::new(self.config.placement.carrier).synthesize(
+            layouter,
+            ships.carrier.unwrap(),
+            placements[0].clone(),
+            placements[1].clone(),
+        )?;
+        PlacementChip::<F, 4>::new(self.config.placement.battleship).synthesize(
+            layouter,
+            ships.battleship.unwrap(),
+            placements[2].clone(),
+            placements[3].clone(),
+        )?;
+        PlacementChip::<F, 3>::new(self.config.placement.cruiser).synthesize(
+            layouter,
+            ships.cruiser.unwrap(),
+            placements[4].clone(),
+            placements[5].clone(),
+        )?;
+        PlacementChip::<F, 3>::new(self.config.placement.submarine).synthesize(
+            layouter,
+            ships.submarine.unwrap(),
+            placements[6].clone(),
+            placements[7].clone(),
+        )?;
+        PlacementChip::<F, 2>::new(self.config.placement.destroyer).synthesize(
+            layouter,
+            ships.destroyer.unwrap(),
+            placements[8].clone(),
+            placements[9].clone(),
+        )?;
         Ok(())
     }
 
@@ -322,11 +352,13 @@ impl<F: FieldExt> BoardInstructions<F> for BoardChip<F> {
         &self,
         layouter: &mut impl Layouter<F>,
         gadget: BoardGadget<F>,
-        placements: Placements<F>
-    ) -> Result<AssignedCell<F, F>, Error> {
+        placements: Placements<F>,
+    ) -> Result<PlacementBits<F>, Error> {
         let chip = TransposeChip::<F>::new(self.config.transpose);
         let bits = gadget.board.state.bitfield::<F, BOARD_SIZE>();
         let commitment = F::from_u128(gadget.board.state.lower_u128());
-        Ok(chip.synthesize(layouter, commitment, bits, placements)?)
+        Ok(chip
+            .synthesize(layouter, commitment, bits, placements)
+            .unwrap())
     }
 }

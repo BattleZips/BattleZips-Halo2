@@ -73,7 +73,7 @@ mod test {
         ));
         // construct BoardValidity circuit
         let circuit = BoardCircuit::<Fp>::new(board);
-        let prover = MockProver::run(8, &circuit, vec![]).unwrap();
+        let prover = MockProver::run(12, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -97,7 +97,7 @@ mod test {
             .show_labels(false)
             // Render the circuit onto your area!
             // The first argument is the size parameter for the circuit.
-            .render(7, &circuit, &root)
+            .render(12, &circuit, &root)
             .unwrap();
     }
 }

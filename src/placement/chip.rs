@@ -128,10 +128,9 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
             let horizontal = meta.query_advice(bit_sum, Rotation::cur());
             let vertical = meta.query_advice(full_window_sum, Rotation::cur());
             let sum = meta.query_advice(bits, Rotation::cur());
-
             // constrain sum == horizontal + vertical
             let selector = meta.query_selector(s_input);
-            Constraints::with_selector(selector, [("h + v = sum", sum - horizontal + vertical)])
+            Constraints::with_selector(selector, [("h + v = sum", sum - (horizontal + vertical))])
         });
 
         // selector[1] gate: bit count running sum
@@ -302,14 +301,14 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
             |mut region: Region<F>| {
                 let mut assigned = Vec::<AssignedCell<F, F>>::new();
                 for i in 0..BOARD_SIZE {
-                    _ = self.config.s_input.enable(&mut region, i);
-                    _ = horizontal[i].copy_advice(
+                    self.config.s_input.enable(&mut region, i)?;
+                    horizontal[i].copy_advice(
                         || format!("copy h bit #{}", i),
                         &mut region,
                         self.config.bit_sum,
                         i,
                     )?;
-                    _ = vertical[i].copy_advice(
+                    vertical[i].copy_advice(
                         || format!("copy v bit #{}", i),
                         &mut region,
                         self.config.full_window_sum,
