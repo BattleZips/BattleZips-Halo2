@@ -45,16 +45,34 @@ impl Deck {
 
     /**
      * Return a deck initialized with valid placements hard-coded
-     * 
+     *
      * @return - a deck with 5 valid & predictably placed ships
      */
     pub fn default() -> Self {
         let mut deck = Deck::new();
         deck.add(Ship::new(ShipType::Carrier, 0, 0, false));
-        deck.add(Ship::new(ShipType::Battleship, 0, 0, false));
+        deck.add(Ship::new(ShipType::Battleship, 0, 1, false));
         deck.add(Ship::new(ShipType::Cruiser, 0, 2, false));
         deck.add(Ship::new(ShipType::Submarine, 0, 3, false));
         deck.add(Ship::new(ShipType::Destroyer, 0, 4, false));
+        deck
+    }
+
+    /**
+     * Given a placement of 5 ships, construct a deck object
+     * @dev index corresponds to [carrier, battleship, cruiser, submarine, destroyer]
+     *
+     * @param x - array of horizontal coordinates for ship heads
+     * @param y - array of vertical coordiantes for ship heads
+     * @param z - array of boolean values toggling vertical/ horizontal ship orientation
+     */
+    pub fn from(x: [u8; 5], y: [u8; 5], z: [bool; 5]) -> Self {
+        let mut deck = Deck::new();
+        deck.add(Ship::new(ShipType::Carrier, x[0], y[0], z[0]));
+        deck.add(Ship::new(ShipType::Battleship, x[1], y[1], z[1]));
+        deck.add(Ship::new(ShipType::Cruiser, x[2], y[2], z[2]));
+        deck.add(Ship::new(ShipType::Submarine, x[3], y[3], z[3]));
+        deck.add(Ship::new(ShipType::Destroyer, x[4], y[4], z[4]));
         deck
     }
 
@@ -165,7 +183,7 @@ impl Board {
         let mut board = Board::new();
         for ship in deck.iterator() {
             if ship.is_some() {
-                board.place(ship.unwrap());
+                _ = board.place(ship.unwrap());
             };
         }
         board
@@ -181,7 +199,7 @@ impl Board {
      * @return - true if the placement is invalid/ collides with existing ship, false otherwise
      */
     pub fn check_collisions(self, ship: Ship) -> bool {
-        let coordinates = ship.coordinates();
+        let coordinates = ship.coordinates(true);
         let mut collision = false;
         for coordinate in coordinates {
             let cell = self.state.value[coordinate];
@@ -205,8 +223,10 @@ impl Board {
             };
             full_witness.push(witness[0]);
             full_witness.push(witness[1]);
-        };
-        PrivateInput { 0: full_witness.try_into().unwrap() }
+        }
+        PrivateInput {
+            0: full_witness.try_into().unwrap(),
+        }
     }
 
     /**
@@ -252,7 +272,7 @@ impl Board {
             // add ship to deck
             self.ships.add(ship);
             // place ship on board
-            let coordinates = ship.empirical_coordiantes();
+            let coordinates = ship.coordinates(false);
             for coordinate in coordinates {
                 self.state.value.get_mut(coordinate).unwrap().set(true);
             }
@@ -260,26 +280,26 @@ impl Board {
         }
     }
 
-    /**
-     * Remove a placed ship from the board
-     *
-     * @param self - the board to remove a ship from
-     * @param ship - the type of ship to remove
-     */
-    pub fn remove(&mut self, ship: Ship) -> Result<(), BoardError> {
-        if self.ships[ship.ship_type].is_none() {
-            Err(BoardError::Unplaced)
-        } else {
-            // remove ship from board
-            let coordiantes = self.ships[ship.ship_type].unwrap().coordinates();
-            for coordinate in coordiantes {
-                self.state.value.get_mut(coordinate).unwrap().set(false);
-            }
-            // remove ship from deck
-            self.ships.remove(ship.ship_type);
-            Ok(())
-        }
-    }
+    // /**
+    //  * Remove a placed ship from the board
+    //  *
+    //  * @param self - the board to remove a ship from
+    //  * @param ship - the type of ship to remove
+    //  */
+    // pub fn remove(&mut self, ship: Ship) -> Result<(), BoardError> {
+    //     if self.ships[ship.ship_type].is_none() {
+    //         Err(BoardError::Unplaced)
+    //     } else {
+    //         // remove ship from board
+    //         let coordiantes = self.ships[ship.ship_type].unwrap().coordinates();
+    //         for coordinate in coordiantes {
+    //             self.state.value.get_mut(coordinate).unwrap().set(false);
+    //         }
+    //         // remove ship from deck
+    //         self.ships.remove(ship.ship_type);
+    //         Ok(())
+    //     }
+    // }
 }
 
 // impl Board {
@@ -301,12 +321,58 @@ mod test {
     use halo2_gadgets::poseidon::primitives::{ConstantLength, Hash, P128Pow5T3, Spec};
     use halo2_proofs::pasta::Fp;
 
+    // #[test]
+    // fn test() {
+    //     let board = Board::from(&Deck::default());
+    //     // board.print();
+    //     // hash([Fp::from(self.state.into_inner())])
+    //     let witness = board.private_witness();
+    //     println!("Hash: {:?}", witness.0);
+    // }
+
     #[test]
-    fn test() {
-        let board = Board::from(&Deck::default());
-        // board.print();
-        // hash([Fp::from(self.state.into_inner())])
-        let witness = board.private_witness();
-        println!("Hash: {:?}", witness.0);
+    fn test2() {
+        let board = Board::from(&Deck::from(
+            [3, 5, 0, 0, 6],
+            [3, 4, 1, 5, 1],
+            [true, false, false, true, false],
+        ));
+        board.print();
+        // get commitment bits
+        let bits = [
+            board.ships.carrier.unwrap().bits(false),
+            board.ships.battleship.unwrap().bits(false),
+            board.ships.cruiser.unwrap().bits(false),
+            board.ships.submarine.unwrap().bits(false),
+            board.ships.destroyer.unwrap().bits(false),
+        ];
+        println!("Transposed assignments\n------------------------");
+        println!("    C B R S D");
+        for i in 0..BOARD_SIZE {
+            let mut row = format!("{}|", i);
+            if i / 10 == 0 { row = format!(" {}", row)};
+            for j in 0..bits.len() {
+                row = format!("{} {}", row, bits[j].value[i] as u8)
+            }
+            println!("{}", row);
+        }
+
+        let bits = [
+            board.ships.carrier.unwrap().bits(true),
+            board.ships.battleship.unwrap().bits(true),
+            board.ships.cruiser.unwrap().bits(true),
+            board.ships.submarine.unwrap().bits(true),
+            board.ships.destroyer.unwrap().bits(true),
+        ];
+        println!("Untransposed assignments\n------------------------");
+        println!("    C B R S D");
+        for i in 0..BOARD_SIZE {
+            let mut row = format!("{}|", i);
+            if i / 10 == 0 { row = format!(" {}", row)};
+            for j in 0..bits.len() {
+                row = format!("{} {}", row, bits[j].value[i] as u8)
+            }
+            println!("{}", row);
+        }
     }
 }

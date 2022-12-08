@@ -10,7 +10,7 @@ use {
     std::marker::PhantomData,
 };
 
-pub type Commitments<F> = [AssignedCell<F, F>; 11];
+pub type Commitments<F> = [AssignedCell<F, F>; 10];
 pub type Placements<F> = [PlacementBits<F>; 10];
 
 // private inputs to the witness during proving

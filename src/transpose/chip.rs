@@ -1,6 +1,6 @@
 use {
     crate::{
-        bits2num::bits2num::{Bits2NumChip, Bits2NumConfig},
+        bitify::bitify::{BitifyConfig, Bits2NumChip},
         board::gadget::Placements,
         placement::gadget::PlacementBits,
         utils::board::BOARD_SIZE,
@@ -20,7 +20,7 @@ use {
  */
 #[derive(Clone, Copy, Debug)]
 pub struct TransposeConfig<F: FieldExt> {
-    pub bits2num: Bits2NumConfig, // bits2num to constrain output commitment
+    pub bits2num: BitifyConfig, // bits2num to constrain output commitment
     pub advice: [Column<Advice>; 11], //0-9: permuted bits; 10: transposed bit
     pub selectors: [Selector; 2],
     _marker: PhantomData<F>,
@@ -55,28 +55,12 @@ pub trait TransposeInstructions<F: FieldExt> {
      * @param transposed - array of 100 bits representing transposed bit commitments
      * @return - reference to assigned cells of transposed bit column
      */
-    fn permute_bits2num(
+    fn load(
         &self,
         layouter: &mut impl Layouter<F>,
         placements: Placements<F>,
         transposed: [F; BOARD_SIZE],
     ) -> Result<PlacementBits<F>, Error>;
-
-    /**
-     * Decompose a transposed commitment input and constrain it to be equal to the permuted assignment
-     *
-     * @param commitment - inputted private witness in board verifier transposed commitment value
-     * @param transposed - references to assigned transposed bits in permute_bits2num
-     * @param transposed_bits - bits on prime field F that correspond to commitment decomposition
-     * @return - reference to commitment cell
-     */
-    fn constrain_transposed(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        commitment: AssignedCell<F, F>,
-        transposed: PlacementBits<F>,
-        transposed_bits: [F; BOARD_SIZE],
-    ) -> Result<AssignedCell<F, F>, Error>;
 }
 
 impl<F: FieldExt> TransposeChip<F> {
@@ -165,26 +149,28 @@ impl<F: FieldExt> TransposeChip<F> {
     pub fn synthesize(
         &self,
         layouter: &mut impl Layouter<F>,
-        commitment: AssignedCell<F, F>,
+        commitment: F,
         bits: [F; BOARD_SIZE],
         placements: Placements<F>,
     ) -> Result<AssignedCell<F, F>, Error> {
-        println!("1");
-        let transposed = self.permute_bits2num(layouter, placements, bits)?;
-        println!("2: {:?}", transposed);
-        // Ok(self.constrain_transposed(layouter, commitment, transposed, bits)?)
+        let transposed = self.load(layouter, placements, bits)?;
+        let bits2num = Bits2NumChip::<F, BOARD_SIZE>::new(commitment, transposed.0);
+        let commitment = bits2num.synthesize(
+            self.config.bits2num,
+            layouter.namespace(|| "decompose transposed commitment"),
+        )?;
         Ok(commitment.clone())
     }
 }
 
 impl<F: FieldExt> TransposeInstructions<F> for TransposeChip<F> {
-    fn permute_bits2num(
+    fn load(
         &self,
         layouter: &mut impl Layouter<F>,
         placements: Placements<F>,
         transposed: [F; BOARD_SIZE],
     ) -> Result<PlacementBits<F>, Error> {
-        let assigned = layouter.assign_region(
+        Ok(layouter.assign_region(
             || "Transpose ship commitments",
             |mut region: Region<F>| {
                 // permute from bits2num chips
@@ -210,60 +196,10 @@ impl<F: FieldExt> TransposeInstructions<F> for TransposeChip<F> {
                         || Value::known(transposed[i].clone()),
                     )?);
                     // toggle transposed row constraint
-                    _ = self.config.selectors[0].enable(&mut region, i);
-                };
-                Ok(())
-            },
-        )?;
-        println!("assigned: {:?}", assigned);
-        // let x = PlacementBits::<F>::from(assigned.clone().try_into().unwrap());
-        // println!("placementbits: {:?}", x)
-        Ok(placements[0].clone())
-    }
-
-    fn constrain_transposed(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        commitment: AssignedCell<F, F>,
-        transposed: PlacementBits<F>,
-        transposed_bits: [F; BOARD_SIZE],
-    ) -> Result<AssignedCell<F, F>, Error> {
-        println!("1!");
-        let bits2num = Bits2NumChip::<F, BOARD_SIZE>::new(commitment.clone(), transposed_bits);
-        println!("2");
-        let decomposed = bits2num
-            .synthesize(
-                self.config.bits2num,
-                layouter.namespace(|| "decompose transposed commitment"),
-            )
-            .unwrap();
-        println!("3 {:?}", decomposed.clone());
-        _ = layouter.assign_region(
-            || "constrain transposed commitment",
-            |mut region| {
-                // assign committed bits/ permute transposed bits
-                for i in 0..BOARD_SIZE {
-                    // toggle transposed commitment decomposition gate
-                    _ = self.config.selectors[1].enable(&mut region, i);
-                    // copy from transpose region
-                    transposed.0[i].copy_advice(
-                        || format!("copy transposed bit {}", i),
-                        &mut region,
-                        self.config.advice[0],
-                        i,
-                    )?;
-                    // copy from transpose commitment bits2num
-                    decomposed[i].copy_advice(
-                        || format!("copy decomposed commitment bit {}", i),
-                        &mut region,
-                        self.config.advice[1],
-                        i,
-                    )?;
+                    self.config.selectors[0].enable(&mut region, i)?;
                 }
-                Ok(())
+                Ok(PlacementBits::<F>::from(assigned.try_into().unwrap()))
             },
-        );
-        println!("4 {:?}", commitment.clone().value());
-        Ok(commitment.clone())
+        )?)
     }
 }

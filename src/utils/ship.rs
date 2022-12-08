@@ -75,7 +75,7 @@ impl Ship {
      * Render ASCII to the console representing the ship placement
      */
     pub fn print(self) {
-        let bits = self.bits().value;
+        let bits = self.bits(true).value;
         let mut lines = Vec::<String>::new();
         for i in 0..BOARD_SIZE {
             if i % 10 == 0 {
@@ -106,30 +106,21 @@ impl Ship {
     /**
      * Return a vector of the coordinates on the game board this ship covers
      *
+     * @param transpose - if true, apply vertical transposition rule
      * @return - vector of ship_type.length() size containing assigned coordinates
      */
-    pub fn coordinates(self) -> Vec<usize> {
-        let length = self.ship_type.length();
+    pub fn coordinates(self, transpose: bool) -> Vec<usize> {
+        // if transpose is toggled, serialze vertical ships differently
         let mut coordinates = Vec::<usize>::new();
-        for i in 0..length {
-            coordinates.push(match self.z {
-                true => (10 * self.x + self.y) as usize + i,
-                false => (10 * self.y + self.x) as usize + i,
-            });
-        }
-        coordinates
-    }
-
-    /**
-     * Return a vector of the coordinates on the board explicitly ordered X horizontally Y vertically
-     *
-     * @return - vector of ship_type.length() size containing assigned coordinates
-     */
-    pub fn empirical_coordiantes(self) -> Vec<usize> {
-        let length = self.ship_type.length();
-        let mut coordinates = Vec::<usize>::new();
-        for i in 0..length {
-            coordinates.push((10 * self.y + self.x) as usize + i);
+        for i in 0..self.ship_type.length() {
+            // compute coordinate point with index offset
+            let x_i = if self.z { self.x } else { self.x + i as u8 };
+            let y_i = if self.z { self.y  + i as u8 } else { self.y };
+            // serialize coordinate point
+            let x = if transpose && self.z { x_i * 10 } else { x_i };
+            let y = if transpose && self.z { y_i } else { y_i * 10 };
+            // combine and store 
+            coordinates.push((x + y) as usize);
         }
         coordinates
     }
@@ -137,10 +128,11 @@ impl Ship {
     /**
      * Export a ship's commitment decomposed to 100 bits
      *
+     * @param transpose - if true, apply vertical transposition rule
      * @return - BitArray booleans representing serialized board state with placement as u256
      */
-    pub fn bits(self) -> BinaryValue {
-        let coordinates = self.coordinates();
+    pub fn bits(self, transpose: bool) -> BinaryValue {
+        let coordinates = self.coordinates(transpose);
         let mut state = bitarr![u64, Lsb0; 0; BOARD_SIZE];
         for coordinate in coordinates {
             state.get_mut(coordinate).unwrap().set(true);
@@ -163,7 +155,7 @@ impl Ship {
      * @return - array of two placements where one is 0
      */
     pub fn private_witness(self) -> [BinaryValue; 2] {
-        let placement = self.bits();
+        let placement = self.bits(true);
         match self.z {
             true => [BinaryValue::empty(), placement],
             false => [placement, BinaryValue::empty()],

@@ -251,7 +251,7 @@ impl<F: FieldExt> PlacementGadget<F> {
      */
     fn assign_trace(ship: Ship) -> [[F; BOARD_SIZE]; 2] {
         let length = ship.ship_type.length();
-        let bits = ship.bits().bitfield::<F, BOARD_SIZE>();
+        let bits = ship.bits(true).bitfield::<F, BOARD_SIZE>();
         // compute bit_sum trace
         let mut trace: Vec<F> = Vec::<F>::new();
         trace.push(bits[0]);
@@ -302,7 +302,7 @@ impl<F: FieldExt> PlacementGadget<F> {
         // return object
         PlacementGadget {
             ship,
-            bits: ship.bits().bitfield(),
+            bits: ship.bits(true).bitfield(),
             bit_sum: trace[0],
             full_window_sum: trace[1],
         }

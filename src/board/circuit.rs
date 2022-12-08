@@ -55,9 +55,7 @@ impl<F: FieldExt> BoardCircuit<F> {
 mod test {
     use {
         super::*,
-        crate::utils::{
-            board::{Board, Deck},
-        },
+        crate::utils::board::{Board, Deck},
         halo2_proofs::{
             dev::{CircuitLayout, MockProver},
             pasta::Fp,
@@ -67,10 +65,15 @@ mod test {
     #[test]
     fn valid_0() {
         // construct valid battleship board
-        let board = Board::from(&Deck::default());
+        // let board = Board::from(&Deck::default());
+        let board = Board::from(&Deck::from(
+            [3, 5, 0, 0, 6],
+            [3, 4, 1, 5, 1],
+            [true, false, false, true, false],
+        ));
         // construct BoardValidity circuit
         let circuit = BoardCircuit::<Fp>::new(board);
-        let prover = MockProver::run(7, &circuit, vec![]).unwrap();
+        let prover = MockProver::run(8, &circuit, vec![]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -79,8 +82,8 @@ mod test {
         use plotters::prelude::*;
         let board = Board::from(&Deck::default());
         let circuit = BoardCircuit::<Fp>::new(board);
-        let root = BitMapBackend::new("src/board/board_layout.png", (1920, 1080))
-            .into_drawing_area();
+        let root =
+            BitMapBackend::new("src/board/board_layout.png", (1920, 1080)).into_drawing_area();
         root.fill(&WHITE).unwrap();
         let root = root
             .titled("Placement Circuit Layout", ("sans-serif", 60))

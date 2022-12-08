@@ -1,7 +1,6 @@
 use {
     super::gadget::PlacementGadget,
     crate::{
-        bits2num::bits2num::{Bits2NumChip, Bits2NumConfig},
         placement::gadget::{InstructionUtilities, PlacementBits, PlacementState},
         utils::{
             board::BOARD_SIZE,
@@ -126,9 +125,10 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
         // selector[0] gate: placement commitment constraint
         meta.create_gate("horizontal/ vertical placement constraint", |meta| {
             // retrieve witnessed cells
-            let sum = meta.query_advice(advice[0], Rotation::cur());
-            let horizontal = meta.query_advice(advice[1], Rotation::cur());
-            let vertical = meta.query_advice(advice[2], Rotation::cur());
+            let horizontal = meta.query_advice(advice[0], Rotation::cur());
+            let vertical = meta.query_advice(advice[1], Rotation::cur());
+            let sum = meta.query_advice(advice[2], Rotation::cur());
+
             // constain either horizontal or vertical placement to be 0
             let either_zero = horizontal.clone() * vertical.clone();
             // constrain sum == horizontal + vertical
@@ -279,7 +279,7 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
     ) -> Result<(), Error> {
         let bits = self.load_bits(layouter, gadget, horizontal, vertical)?;
         let running_sums = self.placement_sums(layouter, bits, gadget)?;
-        self.assign_constraint(layouter, running_sums)?;
+        // self.assign_constraint(layouter, running_sums)?;
         Ok(())
     }
 }

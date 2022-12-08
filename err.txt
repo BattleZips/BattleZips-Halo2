@@ -1,0 +1,215 @@
+Err([
+	ConstraintNotSatisfied {
+		constraint: Constraint {
+			gate: Gate {
+				index: 36,
+				name: "transpose row constraint"
+			},
+			index: 0,
+			name: "Constrain trace value integrity"
+		}, location: InRegion {
+			region: Region {
+				index: 21,
+				name: "Transpose ship commitments"
+			},
+			offset: 0
+		}, cell_values: [
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 55 }, rotation: 0 }, "1"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 56 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 57 }, rotation: 0 }, "1"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 58 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 59 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 60 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 61 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 62 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 63 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 64 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 65 }, rotation: 0 }, "1")
+		]
+	}, ConstraintNotSatisfied {
+		constraint: Constraint {
+			gate: Gate {
+				index: 36,
+				name: "transpose row constraint"
+			},
+			index: 1,
+			name: "Constrain transposition of bit"
+		}, location: InRegion {
+			region: Region {
+				index: 21,
+				name: "Transpose ship commitments"
+			},
+			offset: 0
+		}, cell_values: [
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 55 }, rotation: 0 }, "1"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 56 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 57 }, rotation: 0 }, "1"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 58 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 59 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 60 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 61 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 62 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 63 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 64 }, rotation: 0 }, "0")
+		]
+	}, ConstraintNotSatisfied {
+		constraint: Constraint {
+			gate: Gate {
+				index: 36,
+				name: "transpose row constraint"
+			},
+			index: 0,
+			name: "Constrain trace value integrity"
+		}, location: InRegion {
+			region: Region {
+				index: 21,
+				name: "Transpose ship commitments"
+			}, offset: 1
+		}, cell_values: [
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 55 }, rotation: 0 }, "1"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 56 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 57 }, rotation: 0 }, "1"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 58 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 59 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 60 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 61 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 62 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 63 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 64 }, rotation: 0 }, "0"),
+			(VirtualCell { name: "", column: Column { column_type: Advice, index: 65 }, rotation: 0 }, "1")
+		]
+	}, ConstraintNotSatisfied {
+		constraint: Constraint {
+			gate: Gate {
+				index: 36,
+				name: "transpose row constraint"
+			},
+			index: 1,
+			name: "Constrain transposition of bit"
+			}, location: InRegion {
+				region: Region {
+					index: 21,
+					name: "Transpose ship commitments"
+				},
+				offset: 1
+			}, cell_values: [
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 55 },rotation: 0 }, "1"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 56 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 57 }, rotation: 0 }, "1"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 58 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 59 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 60 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 61 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 62 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 63 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 64 }, rotation: 0 }, "0")
+			]
+		}, ConstraintNotSatisfied {
+			constraint: Constraint {
+				gate: Gate {
+					index: 36,
+					name: "transpose row constraint"
+				},
+				index: 0,
+				name: "Constrain trace value integrity"
+			}, location: InRegion {
+				region: Region {
+					index: 21,
+					name: "Transpose ship commitments"
+				},
+				offset: 2
+			}, cell_values: [
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 55 }, rotation: 0 }, "1"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 56 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 57 }, rotation: 0 }, "1"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 58 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 59 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 60 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 61 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 62 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 63 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 64 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 65 }, rotation: 0 }, "1")
+			]
+		}, ConstraintNotSatisfied {
+			constraint: Constraint {
+				gate: Gate {
+					index: 36,
+					name: "transpose row constraint"
+				},
+				index: 1,
+				name: "Constrain transposition of bit"
+			}, location: InRegion {
+				region: Region {
+					index: 21,
+					name: "Transpose ship commitments"
+				},
+				offset: 2
+			}, cell_values: [
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 55 }, rotation: 0 }, "1"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 56 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 57 }, rotation: 0 }, "1"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 58 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 59 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 60 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 61 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 62 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 63 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 64 }, rotation: 0 }, "0")
+			]
+		}, ConstraintNotSatisfied {
+			constraint: Constraint {
+				gate: Gate {
+					index: 36,
+					name: "transpose row constraint"
+				},
+				index: 0,
+				name: "Constrain trace value integrity"
+			}, location: InRegion {
+				region: Region {
+					index: 21,
+					name: "Transpose ship commitments"
+				},
+				offset: 3
+			}, cell_values: [
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 55 }, rotation: 0 }, "1"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 56 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 57 }, rotation: 0 }, "1"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 58 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 59 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 60 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 61 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 62 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 63 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 64 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 65 }, rotation: 0 }, "1")
+			]
+		}, ConstraintNotSatisfied {
+			constraint: Constraint {
+				gate: Gate {
+					index: 36,
+					name: "transpose row constraint"
+				},
+				index: 1,
+				name: "Constrain transposition of bit" 
+			}, location: InRegion {
+				region: Region {
+					index: 21,
+					name: "Transpose ship commitments"
+				},
+				offset: 3
+			}, cell_values: [
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 55 }, rotation: 0 }, "1"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 56 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 57 }, rotation: 0 }, "1"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 58 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 59 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 60 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 61 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 62 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 63 }, rotation: 0 }, "0"),
+				(VirtualCell { name: "", column: Column { column_type: Advice, index: 64 }, rotation: 0 }, "0")
+			]
+		}
+	]
+)

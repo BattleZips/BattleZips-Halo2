@@ -1,10 +1,4 @@
-use {
-    bitvec::prelude::*,
-    halo2_proofs::{
-        arithmetic::FieldExt,
-        pasta::{Fp, Fq},
-    },
-};
+use {bitvec::prelude::*, halo2_proofs::arithmetic::FieldExt};
 
 /**
  * Binary element with converstion functionality

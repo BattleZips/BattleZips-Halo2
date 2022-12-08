@@ -5,6 +5,6 @@
 
 mod utils;
 mod placement;
-mod bits2num;
+mod bitify;
 mod board;
 mod transpose;
