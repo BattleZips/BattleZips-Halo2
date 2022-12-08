@@ -1,3 +1,3 @@
 pub mod chip;
-pub mod gadget;
+pub mod primitives;
 // pub mod circuit;

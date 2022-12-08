@@ -1,15 +1,12 @@
 use {
-    super::gadget::PlacementGadget,
-    crate::{
-        placement::gadget::{InstructionUtilities, PlacementBits, PlacementState},
-        utils::{
-            board::BOARD_SIZE,
-        },
-    },
+    super::primitives::*,
+    crate::utils::{board::BOARD_SIZE, ship::Ship},
     halo2_proofs::{
         arithmetic::{lagrange_interpolate, FieldExt},
-        circuit::{AssignedCell, Value, Chip, Layouter, Region},
-        plonk::{Advice, Column, ConstraintSystem, Constraints, Error, Expression, Selector},
+        circuit::{AssignedCell, Chip, Layouter, Region, Value},
+        plonk::{
+            Advice, Column, ConstraintSystem, Constraints, Error, Expression, Fixed, Selector,
+        },
         poly::Rotation,
     },
     std::marker::PhantomData,
@@ -29,13 +26,65 @@ use {
  */
 #[derive(Clone, Copy, Debug)]
 pub struct PlacementConfig<F: FieldExt, const S: usize> {
-    pub advice: [Column<Advice>; 3],
-    pub selectors: [Selector; 5],
+    pub bits: Column<Advice>, // store permuted bit decomposition (sum H + V in s_permute)
+    pub bit_sum: Column<Advice>, // store unning sum of flipped bits (H placement in s_permute)
+    pub full_window_sum: Column<Advice>, // store running sum of full bit windows (V placement in s_permute)
+    pub fixed: Column<Fixed>,            // fixed column for constant values
+    pub s_input: Selector,               // permute H+V decomposition & constrain sum
+    pub s_sum_bits: Selector,            // increment prev bit sum if current bit flipped
+    pub s_adjacency: Selector, // count bits in bit window and increment prev window sum if full
+    pub s_permute: Selector,   // copy previous window sum to current window sum
+    pub s_constrain: Selector, // constrain full_window_sum to be 1 and bit_sum to be S
     _marker: PhantomData<F>,
 }
 
 pub struct PlacementChip<F: FieldExt, const S: usize> {
     config: PlacementConfig<F, S>,
+}
+
+// instructions used by the chip to synthesize the proof
+pub trait PlacementInstructions<F: FieldExt, const S: usize> {
+    /**
+     * Copy in horizontal, vertical bits2num decomposition. Sum each bit for H+V to collapse
+     * @dev since H or V is 0 this just permutes in the nonzero decomposition
+     *
+     * @param bits - array of bit values to assign for sum(h, v)
+     * @param horizontal - assigned cells for bits2num decomposition of horizontal commitment
+     * @param vertical - assigned cells for bits2num decomposition of horizontal commitment
+     * @return - assigned cells where each row is constrained to be sum of H + V bits
+     */
+    fn load_bits(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        bits: [F; BOARD_SIZE],
+        horizontal: PlacementBits<F>,
+        vertical: PlacementBits<F>,
+    ) -> Result<PlacementBits<F>, Error>;
+
+    /**
+     * Generate the running sum for bit counts and full bit windows
+     *
+     * @param bits - 100 assigned bits to permute into this region
+     * @param trace - values for running sum trace to witness
+     * @return - reference to final assignments for running bit sums and full bit window sums
+     */
+    fn placement_sums(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        bits: PlacementBits<F>,
+        trace: PlacementTrace<F>,
+    ) -> Result<PlacementState<F>, Error>;
+
+    /**
+     * Constrain the witnessed running sum values for placement to be valid under game logic
+     *
+     * @param state - reference to assigned bit count and full bit window count cells
+     */
+    fn assign_constraint(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        state: PlacementState<F>,
+    ) -> Result<(), Error>;
 }
 
 impl<F: FieldExt, const S: usize> Chip<F> for PlacementChip<F, S> {
@@ -50,120 +99,65 @@ impl<F: FieldExt, const S: usize> Chip<F> for PlacementChip<F, S> {
         &()
     }
 }
-pub trait PlacementInstructions<F: FieldExt, const S: usize> {
-
-    /**
-     * Copy in horizontal, vertical bits2num decomposition. Sum each bit for H+V to collapse
-     * @dev since H or V is 0 this just permutes in the nonzero decomposition
-     * 
-     * @param gadget - PlacementGadget containing bit values
-     * @param horizontal - assigned cells for bits2num decomposition of horizontal commitment
-     * @param vertical - assigned cells for bits2num decomposition of horizontal commitment
-     * @return - assigned cells where each row is constrained to be sum of H + V bits
-     */
-    fn load_bits(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        gadget: PlacementGadget<F>,
-        horizontal: PlacementBits<F>,
-        vertical: PlacementBits<F>
-    ) -> Result<PlacementBits<F>, Error>;
-
-    /**
-     * Generate the running sum for bit counts and full bit windows
-     *
-     * @param bits - 100 assigned bits to permute into this region
-     * @param gadget - contains values for running sum trace to witness
-     * @return - reference to final assignments for running bit sums and full bit window sums
-     */
-    fn placement_sums(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        bits: PlacementBits<F>,
-        gadget: PlacementGadget<F>,
-    ) -> Result<PlacementState<F>, Error>;
-
-    /**
-     * Constrain the witnessed running sum values for placement to be valid under game logic
-     *
-     * @param board_values - [horizontal, vertical] assignments
-     * @param state - reference to assigned bit count and full bit window count cells
-     */
-    fn assign_constraint(
-        &self,
-        layouter: &mut impl Layouter<F>,
-        state: PlacementState<F>,
-    ) -> Result<(), Error>;
-}
 
 impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
     pub fn new(config: PlacementConfig<F, S>) -> Self {
         PlacementChip { config }
     }
 
-    pub fn configure(meta: &mut ConstraintSystem<F>) -> PlacementConfig<F, S> {
-        // allocate fixed column for constants
-        let fixed = meta.fixed_column();
-        meta.enable_equality(fixed);
-
-        // define advice columns
-        let mut advice = Vec::<Column<Advice>>::new();
-        for _ in 0..3 {
-            let col = meta.advice_column();
-            meta.enable_equality(col);
-            advice.push(col);
-        }
-        let advice: [Column<Advice>; 3] = advice.try_into().unwrap();
-
+    pub fn configure(
+        meta: &mut ConstraintSystem<F>,
+        bits: Column<Advice>,
+        bit_sum: Column<Advice>,
+        full_window_sum: Column<Advice>,
+        fixed: Column<Fixed>,
+    ) -> PlacementConfig<F, S> {
         // define selectors
-        let mut selectors = Vec::<Selector>::new();
-        for _ in 0..5 {
-            selectors.push(meta.selector());
-        }
-        let selectors: [Selector; 5] = selectors.try_into().unwrap();
+        let s_input = meta.selector();
+        let s_sum_bits = meta.selector();
+        let s_adjacency = meta.selector();
+        let s_permute = meta.selector();
+        let s_constrain = meta.selector();
 
-        // selector[0] gate: placement commitment constraint
-        meta.create_gate("horizontal/ vertical placement constraint", |meta| {
+        meta.create_gate("sum inputted H, V bits", |meta| {
             // retrieve witnessed cells
-            let horizontal = meta.query_advice(advice[0], Rotation::cur());
-            let vertical = meta.query_advice(advice[1], Rotation::cur());
-            let sum = meta.query_advice(advice[2], Rotation::cur());
+            // repurposing columns:
+            // - bit_sum: holds horizontal bit decomposition
+            // - full_window_sum: holds vertical bit decomposition
+            // - bits: holds sum of h+v bit
+            let horizontal = meta.query_advice(bit_sum, Rotation::cur());
+            let vertical = meta.query_advice(full_window_sum, Rotation::cur());
+            let sum = meta.query_advice(bits, Rotation::cur());
 
-            // constain either horizontal or vertical placement to be 0
-            let either_zero = horizontal.clone() * vertical.clone();
             // constrain sum == horizontal + vertical
-            let summed = sum - (horizontal.clone() + vertical.clone());
-            let selector = meta.query_selector(selectors[0]);
-            Constraints::with_selector(
-                selector,
-                [("Either h or v == 0", either_zero), ("h + v = sum", summed)],
-            )
+            let selector = meta.query_selector(s_input);
+            Constraints::with_selector(selector, [("h + v = sum", sum - horizontal + vertical)])
         });
 
         // selector[1] gate: bit count running sum
         meta.create_gate("placement bit count", |meta| {
             // check that this row's bit count is sum of prev row's bit count + current row's bit value
-            let bit = meta.query_advice(advice[0], Rotation::cur());
+            let bit = meta.query_advice(bits, Rotation::cur());
             // store running bit sum in advice[0]
-            let prev = meta.query_advice(advice[1], Rotation::prev());
-            let sum = meta.query_advice(advice[1], Rotation::cur());
+            let prev = meta.query_advice(bit_sum, Rotation::prev());
+            let sum = meta.query_advice(bit_sum, Rotation::cur());
             // constrain sum to be equal to bit + prev
-            let selector = meta.query_selector(selectors[1]);
+            let selector = meta.query_selector(s_sum_bits);
             Constraints::with_selector(selector, [("Running Sum: Bits", bit + prev - sum)])
         });
 
         // selector[2] gate: full bit window running sum
         meta.create_gate("adjacency bit count", |meta| {
             // count the number of bits in this gate and the proceeding `S` rows in bit column (A^2)
-            let mut bit_count = meta.query_advice(advice[0], Rotation::cur());
+            let mut bit_count = meta.query_advice(bits, Rotation::cur());
             for i in 1..S {
-                let bit = meta.query_advice(advice[0], Rotation(i as i32));
+                let bit = meta.query_advice(bits, Rotation(i as i32));
                 bit_count = bit_count + bit;
             }
 
             // query full bit window running sum at column (A^4)
-            let prev_full_window_count = meta.query_advice(advice[2], Rotation::prev());
-            let full_window_count = meta.query_advice(advice[2], Rotation::cur());
+            let prev_full_window_count = meta.query_advice(full_window_sum, Rotation::prev());
+            let full_window_count = meta.query_advice(full_window_sum, Rotation::cur());
             // constant expressions
             let ship_len = Expression::Constant(F::from(S as u64));
             let inverse_ship_len =
@@ -220,7 +214,7 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
             // bit_count = bit_count
             // - if bit_count == ship_len, running_sum = prev_running_sum + 1
             // - if bit_count != ship_len, running_sum = prev_running
-            let selector = meta.query_selector(selectors[2]);
+            let selector = meta.query_selector(s_adjacency);
             let constraint = full_window_count.clone()
                 - prev_full_window_count
                 - interpolate_incrementor(bit_count);
@@ -232,10 +226,10 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
             // confirm that the current row's adjacent bit count is the same as the previous rows
             // @dev used in rows where ship cannot be placed (offset % 10 + ship_length >= 10)
             // store running adjacency count in advice[2]
-            let previous = meta.query_advice(advice[2], Rotation::prev());
-            let current = meta.query_advice(advice[2], Rotation::cur());
+            let previous = meta.query_advice(full_window_sum, Rotation::prev());
+            let current = meta.query_advice(full_window_sum, Rotation::cur());
             // constrain previous to equal current
-            let selector = meta.query_selector(selectors[3]);
+            let selector = meta.query_selector(s_permute);
             Constraints::with_selector(
                 selector,
                 [("Premute Full Window Running Sum", previous - current)],
@@ -248,11 +242,11 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
             // @dev constraining of sum(h,v) to bits2num output occurs in synthesis
             let ship_len = Expression::Constant(F::from(S as u64));
             let one = Expression::Constant(F::one());
-            let bit_count = meta.query_advice(advice[1], Rotation::cur());
-            let full_window_count = meta.query_advice(advice[2], Rotation::cur());
+            let bit_count = meta.query_advice(bit_sum, Rotation::cur());
+            let full_window_count = meta.query_advice(full_window_sum, Rotation::cur());
             // - constrain bit count to be equal to S
             // - constrain exactly one full bit window
-            let selector = meta.query_selector(selectors[4]);
+            let selector = meta.query_selector(s_constrain);
             Constraints::with_selector(
                 selector,
                 [
@@ -264,8 +258,15 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
 
         // export config
         PlacementConfig {
-            advice,
-            selectors,
+            bits,
+            bit_sum,
+            full_window_sum,
+            fixed,
+            s_input,
+            s_sum_bits,
+            s_adjacency,
+            s_permute,
+            s_constrain,
             _marker: PhantomData,
         }
     }
@@ -273,65 +274,64 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
     pub fn synthesize(
         &self,
         layouter: &mut impl Layouter<F>,
-        gadget: PlacementGadget<F>,
+        ship: Ship,
         horizontal: PlacementBits<F>,
         vertical: PlacementBits<F>,
     ) -> Result<(), Error> {
-        let bits = self.load_bits(layouter, gadget, horizontal, vertical)?;
-        let running_sums = self.placement_sums(layouter, bits, gadget)?;
-        // self.assign_constraint(layouter, running_sums)?;
+        // load values in memoru
+        let bits = ship.bits(true).bitfield();
+        let trace = compute_placement_trace::<F>(ship);
+        // begin proof synthesis
+        let assigned_bits = self.load_bits(layouter, bits, horizontal, vertical)?;
+        let running_sums = self.placement_sums(layouter, assigned_bits, trace)?;
+        self.assign_constraint(layouter, running_sums)?;
         Ok(())
     }
 }
 
 impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<F, S> {
-    
     fn load_bits(
         &self,
         layouter: &mut impl Layouter<F>,
-        gadget: PlacementGadget<F>,
+        bits: [F; BOARD_SIZE],
         horizontal: PlacementBits<F>,
-        vertical: PlacementBits<F>
+        vertical: PlacementBits<F>,
     ) -> Result<PlacementBits<F>, Error> {
-        Ok(
-            layouter.assign_region(
-                || "permute and collapse bit decompositions",
-                |mut region: Region<F>| {
-                    let mut assigned = Vec::<AssignedCell<F, F>>::new();
-                    for i in 0..BOARD_SIZE {
-                        _ = self.config.selectors[0].enable(&mut region, i);
-                        _ = horizontal.0[i].copy_advice(
-                            || format!("copy h bit #{}", i),
-                            &mut region,
-                            self.config.advice[0],
-                            i
-                        )?;
-                        _ = vertical.0[i].copy_advice(
-                            || format!("copy v bit #{}", i),
-                            &mut region,
-                            self.config.advice[1],
-                            i
-                        )?;
-                        assigned.push(
-                            region.assign_advice(
-                                || format!("collapse bit #{}", i),
-                                self.config.advice[2],
-                                i,
-                                || Value::known(gadget.bits[i]),
-                            )?
-                        );
-                    };
-                    Ok(PlacementBits::<F>::from(assigned.try_into().unwrap()))
+        Ok(layouter.assign_region(
+            || "permute and collapse bit decompositions",
+            |mut region: Region<F>| {
+                let mut assigned = Vec::<AssignedCell<F, F>>::new();
+                for i in 0..BOARD_SIZE {
+                    _ = self.config.s_input.enable(&mut region, i);
+                    _ = horizontal[i].copy_advice(
+                        || format!("copy h bit #{}", i),
+                        &mut region,
+                        self.config.bit_sum,
+                        i,
+                    )?;
+                    _ = vertical[i].copy_advice(
+                        || format!("copy v bit #{}", i),
+                        &mut region,
+                        self.config.full_window_sum,
+                        i,
+                    )?;
+                    assigned.push(region.assign_advice(
+                        || format!("collapse bit #{}", i),
+                        self.config.bits,
+                        i,
+                        || Value::known(bits[i]),
+                    )?);
                 }
-            )?
-        )
+                Ok(PlacementBits::<F>::from(assigned.try_into().unwrap()))
+            },
+        )?)
     }
 
     fn placement_sums(
         &self,
         layouter: &mut impl Layouter<F>,
         bits2num: PlacementBits<F>,
-        gadget: PlacementGadget<F>,
+        trace: PlacementTrace<F>,
     ) -> Result<PlacementState<F>, Error> {
         Ok(layouter.assign_region(
             || "placement running sum trace",
@@ -341,8 +341,8 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
                 let mut state = PlacementState::<F>::assign_padding_row(&mut region, &self.config)?;
                 // permute bits constrained in "load placement encoded values" region to this region
                 let _ = state.permute_bits2num(&bits2num, &mut region, &self.config)?;
-                // // assign running sum trace across 100 (BOARD_SIZE) rows
-                state = state.assign_running_sum_trace(&mut region, &self.config, &gadget)?;
+                // assign running sum trace across 100 (BOARD_SIZE) rows
+                state = state.assign_running_sum_trace(&mut region, &self.config, &trace)?;
                 Ok(state)
             },
         )?)
@@ -359,16 +359,16 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
                 state.bit_sum.copy_advice(
                     || "copy bit sum total count to constraint region",
                     &mut region,
-                    self.config.advice[1],
+                    self.config.bit_sum,
                     0,
                 )?;
                 state.full_window_sum.copy_advice(
                     || "copy full bit window total count to constaint region",
                     &mut region,
-                    self.config.advice[2],
+                    self.config.full_window_sum,
                     0,
                 )?;
-                self.config.selectors[4].enable(&mut region, 0)?;
+                self.config.s_constrain.enable(&mut region, 0)?;
                 Ok(())
             },
         )?)
