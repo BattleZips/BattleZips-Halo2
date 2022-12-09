@@ -1,6 +1,6 @@
 use {
     crate::{
-        bitify::bitify::{BitifyConfig, Num2BitsChip},
+        bitify::bitify::{BitifyConfig, Bits2NumChip, Num2BitsChip},
         board::gadget::{BoardGadget, Commitments, Placements},
         placement::{
             chip::{PlacementChip, PlacementConfig},
@@ -40,8 +40,10 @@ pub struct PlacementConfigs<F: FieldExt> {
 #[derive(Clone, Debug)]
 pub struct BoardConfig<F: FieldExt> {
     pub num2bits: [BitifyConfig; 10],
+    pub bits2num: BitifyConfig,
     pub placement: PlacementConfigs<F>,
     pub transpose: TransposeConfig<F>,
+    // pub poseidon: Pow5Config<F, 3, 2>,
     pub advice: [Column<Advice>; 11],
     pub fixed: [Column<Fixed>; 1],
     pub selectors: [Selector; 1],
@@ -170,6 +172,9 @@ impl<F: FieldExt> BoardChip<F> {
             ));
         }
         let num2bits: [BitifyConfig; 10] = num2bits.try_into().unwrap();
+        let bits2num = Bits2NumChip::<_, BOARD_SIZE>::configure(
+            meta, advice[0], advice[1], advice[2], fixed[0]
+        );
 
         // define placement chips
         let placement = PlacementConfigs {
@@ -195,7 +200,7 @@ impl<F: FieldExt> BoardChip<F> {
             TransposeChip::<F>::configure(meta, advice[0..10].try_into().unwrap(), advice[10]);
 
         // define poseidon chip
-        // let poseidon = Pow5Chip::<F, 3, 2>::config(meta, state, partial_sbox, rc_a, rc_b)
+        // let poseidon = Pow5Chip::<F, 3, 2>::config(meta, )
 
         // define gates
         meta.create_gate("Commitment orientation H OR V == 0 constraint", |meta| {
@@ -234,6 +239,7 @@ impl<F: FieldExt> BoardChip<F> {
         // return config
         BoardConfig {
             num2bits,
+            bits2num,
             placement,
             transpose,
             advice,
