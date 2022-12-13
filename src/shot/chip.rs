@@ -155,7 +155,7 @@ impl<F: FieldExt> ShotChip<F> {
     /**
      * Configure the computation space of the circuit & return ShotConfig
      */
-    pub fn configure(meta: &mut ConstraintSystem<F>) -> ShotConfig<F> {
+    pub fn configure(meta: &mut ConstraintSystem<F>, instance: Column<Instance>) -> ShotConfig<F> {
         // define advice
         let mut advice = Vec::<Column<Advice>>::new();
         for _ in 0..4 {
@@ -175,7 +175,7 @@ impl<F: FieldExt> ShotChip<F> {
         let fixed: [Column<Fixed>; 1] = fixed.try_into().unwrap();
 
         // define instance
-        let instance = meta.instance_column();
+        // let instance = meta.instance_column();
         meta.enable_equality(instance);
 
         // define selectors
@@ -396,9 +396,8 @@ impl<F: FieldExt> ShotInstructions<F> for ShotChip<F> {
                     0,
                     F::zero(),
                 )?;
-                self.config.selectors[1].enable(&mut region, 0)?;
                 // assign rows
-                for i in 1..BOARD_SIZE {
+                for i in 0..BOARD_SIZE {
                     // permute bits for row
                     bits[0][i].copy_advice(
                         || format!("copy board bit {}", i),
@@ -406,11 +405,11 @@ impl<F: FieldExt> ShotInstructions<F> for ShotChip<F> {
                         self.config.advice[0],
                         i + 1,
                     )?;
-                    bits[1][i - 1].copy_advice(
+                    bits[1][i].copy_advice(
                         || format!("copy shot bit {}", i),
                         &mut region,
                         self.config.advice[1],
-                        i,
+                        i + 1,
                     )?;
                     // assign trace for row
                     shot_sum = region.assign_advice(
@@ -425,7 +424,7 @@ impl<F: FieldExt> ShotInstructions<F> for ShotChip<F> {
                         i + 1,
                         || Value::known(trace[1][i]),
                     )?;
-                    self.config.selectors[1].enable(&mut region, i)?;
+                    self.config.selectors[1].enable(&mut region, i + 1)?;
                 }
                 Ok([shot_sum, hit_sum])
             },
@@ -460,7 +459,7 @@ impl<F: FieldExt> ShotInstructions<F> for ShotChip<F> {
                     self.config.advice[2],
                     0,
                 )?;
-                self.config.selectors[2].enable(&mut region, 0);
+                self.config.selectors[2].enable(&mut region, 0)?;
                 Ok(())
             },
         )?)
