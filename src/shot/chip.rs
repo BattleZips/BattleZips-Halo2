@@ -1,7 +1,13 @@
+use halo2_gadgets::poseidon::primitives::ConstantLength;
+
 use {
     crate::{
         bitify::bitify::{BitifyConfig, Num2BitsChip},
         utils::{binary::BinaryValue, board::BOARD_SIZE},
+    },
+    halo2_gadgets::poseidon::{
+        primitives::{P128Pow5T3, Spec},
+        Hash, Pow5Chip, Pow5Config,
     },
     halo2_proofs::{
         arithmetic::FieldExt,
@@ -55,21 +61,24 @@ pub fn compute_shot_trace<F: FieldExt>(
  * @param selectors - selectors used to toggle gates in ShotChip
  * @param fixed - fixed columns for constant values in ShotChip
  */
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ShotConfig<F: FieldExt> {
     pub num2bits: [BitifyConfig; 2],
+    pub poseidon: Pow5Config<F, 3, 2>,
+    pub input: Column<Advice>,
     pub advice: [Column<Advice>; 4],
     pub instance: Column<Instance>,
-    pub fixed: [Column<Fixed>; 1],
+    pub fixed: [Column<Fixed>; 6],
     pub selectors: [Selector; 3],
     _marker: PhantomData<F>,
 }
 
-pub struct ShotChip<F: FieldExt> {
+pub struct ShotChip<S: Spec<F, 3, 2>, F: FieldExt> {
     config: ShotConfig<F>,
+    _marker: PhantomData<S>,
 }
 
-impl<F: FieldExt> Chip<F> for ShotChip<F> {
+impl<S: Spec<F, 3, 2>, F: FieldExt> Chip<F> for ShotChip<S, F> {
     type Config = ShotConfig<F>;
     type Loaded = ();
 
@@ -82,7 +91,7 @@ impl<F: FieldExt> Chip<F> for ShotChip<F> {
     }
 }
 
-pub trait ShotInstructions<F: FieldExt> {
+pub trait ShotInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
     /**
      * Load the private advice inputs into the chip
      *
@@ -145,17 +154,32 @@ pub trait ShotInstructions<F: FieldExt> {
         hit: AssignedCell<F, F>,
         output: [AssignedCell<F, F>; 2],
     ) -> Result<(), Error>;
+
+    /**
+     * Hash the private board state
+     *
+     * @param preimage - the private board state (bits2num'ed)
+     * @return - assigned cell storing poseidon hash of the board state
+     */
+    fn hash_board(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        preimage: AssignedCell<F, F>,
+    ) -> Result<AssignedCell<F, F>, Error>;
 }
 
-impl<F: FieldExt> ShotChip<F> {
+impl<S: Spec<F, 3, 2>, F: FieldExt> ShotChip<S, F> {
     pub fn new(config: ShotConfig<F>) -> Self {
-        ShotChip { config }
+        ShotChip {
+            config,
+            _marker: PhantomData,
+        }
     }
 
     /**
      * Configure the computation space of the circuit & return ShotConfig
      */
-    pub fn configure(meta: &mut ConstraintSystem<F>, instance: Column<Instance>) -> ShotConfig<F> {
+    pub fn configure(meta: &mut ConstraintSystem<F>) -> ShotConfig<F> {
         // define advice
         let mut advice = Vec::<Column<Advice>>::new();
         for _ in 0..4 {
@@ -164,18 +188,23 @@ impl<F: FieldExt> ShotChip<F> {
             advice.push(col);
         }
         let advice: [Column<Advice>; 4] = advice.try_into().unwrap();
+        let input = meta.advice_column();
+        meta.enable_equality(input);
 
         // define fixed
         let mut fixed = Vec::<Column<Fixed>>::new();
-        for _ in 0..1 {
+        for _ in 0..6 {
             let col = meta.fixed_column();
-            meta.enable_constant(col);
             fixed.push(col);
         }
-        let fixed: [Column<Fixed>; 1] = fixed.try_into().unwrap();
+        // poseidon rc_a: fixed[3..6]
+        // poseidon rc_b: fixed[0..3]
+        // fixed[0] has constant enabled
+        let fixed: [Column<Fixed>; 6] = fixed.try_into().unwrap();
+        meta.enable_constant(fixed[0]);
 
         // define instance
-        // let instance = meta.instance_column();
+        let instance = meta.instance_column();
         meta.enable_equality(instance);
 
         // define selectors
@@ -194,9 +223,18 @@ impl<F: FieldExt> ShotChip<F> {
         }
         let num2bits: [BitifyConfig; 2] = num2bits.try_into().unwrap();
 
+        // define poseidon hash chip
+        let poseidon = Pow5Chip::<F, 3, 2>::configure::<S>(
+            meta,
+            [advice[0], advice[1], advice[2]],
+            advice[3],
+            [fixed[3], fixed[4], fixed[5]],
+            [fixed[0], fixed[1], fixed[2]],
+        );
+
         // define gates
         meta.create_gate("boolean hit assetion", |meta| {
-            let assertion = meta.query_advice(advice[3], Rotation::cur());
+            let assertion = meta.query_advice(input, Rotation::cur());
             let one = Expression::Constant(F::one());
             let constraint = (one - assertion.clone()) * assertion.clone();
             // constrain using selector[0]
@@ -256,7 +294,9 @@ impl<F: FieldExt> ShotChip<F> {
         // return config
         ShotConfig {
             num2bits,
+            poseidon,
             advice,
+            input,
             instance,
             fixed,
             selectors,
@@ -303,15 +343,17 @@ impl<F: FieldExt> ShotChip<F> {
         let running_sum_results = self.running_sums(&mut layouter, assigned_bits, trace)?;
         // constrain results of running sum
         self.running_sum_output(&mut layouter, inputs[3].clone(), running_sum_results)?;
+        // hash board state
+        let hashed_state = self.hash_board(&mut layouter, inputs[1].clone())?;
         // export public values
-        layouter.constrain_instance(inputs[1].cell(), self.config.instance, 0)?;
+        layouter.constrain_instance(hashed_state.cell(), self.config.instance, 0)?;
         layouter.constrain_instance(inputs[2].cell(), self.config.instance, 1)?;
         layouter.constrain_instance(inputs[3].cell(), self.config.instance, 2)?;
         Ok(())
     }
 }
 
-impl<F: FieldExt> ShotInstructions<F> for ShotChip<F> {
+impl<S: Spec<F, 3, 2>, F: FieldExt> ShotInstructions<S, F> for ShotChip<S, F> {
     fn load_advice(
         &self,
         layouter: &mut impl Layouter<F>,
@@ -325,29 +367,29 @@ impl<F: FieldExt> ShotInstructions<F> for ShotChip<F> {
             |mut region| {
                 let board_state = region.assign_advice(
                     || "assign board state",
-                    self.config.advice[0],
+                    self.config.input,
                     0,
                     || Value::known(board_state),
                 )?;
                 let board_commitment = region.assign_advice(
                     || "assign board commitment",
-                    self.config.advice[1],
-                    0,
+                    self.config.input,
+                    1,
                     || Value::known(board_commitment),
                 )?;
                 let shot_commitment = region.assign_advice(
                     || "assign shot commitment",
-                    self.config.advice[2],
-                    0,
+                    self.config.input,
+                    2,
                     || Value::known(shot_commitment),
                 )?;
                 let hit = region.assign_advice(
                     || "assign hit assertion",
-                    self.config.advice[3],
-                    0,
+                    self.config.input,
+                    3,
                     || Value::known(hit),
                 )?;
-                self.config.selectors[0].enable(&mut region, 0)?;
+                self.config.selectors[0].enable(&mut region, 3)?;
                 Ok([board_state, board_commitment, shot_commitment, hit])
             },
         )?)
@@ -463,5 +505,18 @@ impl<F: FieldExt> ShotInstructions<F> for ShotChip<F> {
                 Ok(())
             },
         )?)
+    }
+
+    fn hash_board(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        preimage: AssignedCell<F, F>,
+    ) -> Result<AssignedCell<F, F>, Error> {
+        // // input word
+        let chip = Pow5Chip::construct(self.config.poseidon.clone());
+
+        let hasher =
+            Hash::<_, _, S, ConstantLength<1>, 3, 2>::init(chip, layouter.namespace(|| "hasher"))?;
+        hasher.hash(layouter.namespace(|| "hash"), [preimage])
     }
 }

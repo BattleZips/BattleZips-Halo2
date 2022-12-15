@@ -9,3 +9,4 @@ mod bitify;
 mod transpose;
 mod board;
 mod shot;
+mod poseidon;
