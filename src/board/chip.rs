@@ -1,14 +1,13 @@
 use {
     crate::{
         bitify::bitify::{BitifyConfig, Bits2NumChip, Num2BitsChip},
-        board::gadget::{BoardGadget, Commitments, Placements},
         placement::{
             chip::{PlacementChip, PlacementConfig},
             primitives::PlacementBits,
         },
         transpose::chip::{TransposeChip, TransposeConfig},
         utils::{
-            board::{Deck, BOARD_SIZE},
+            board::{Board, Deck, BOARD_SIZE},
             ship::ShipType,
         },
     },
@@ -23,6 +22,31 @@ use {
     },
     std::marker::PhantomData,
 };
+
+pub type Commitments<F> = [AssignedCell<F, F>; 10];
+pub type Placements<F> = [PlacementBits<F>; 10];
+
+/**
+ * Return a label for commitments in debugging
+ *
+ * @param i - the enumerable index [0-9] of commitment types
+ * @return - the label to be used in debugging messages
+ */
+pub fn commitment_label(i: usize) -> String {
+    String::from(match i {
+        0 => "H5",
+        1 => "V5",
+        2 => "H4",
+        3 => "V4",
+        4 => "H3a",
+        5 => "V3a",
+        6 => "H3b",
+        7 => "V3b",
+        8 => "H2",
+        9 => "V2",
+        _other => "NULL",
+    })
+}
 
 // bundles all placement configs together
 #[derive(Clone, Copy, Debug)]
@@ -77,27 +101,27 @@ impl<F: FieldExt> Chip<F> for BoardChip<F> {
  */
 pub trait BoardInstructions<F: FieldExt> {
     /**
-     * Load the 10 ship placement commitments + transposed commitment into the advice column
+     * Load the 10 ship placement commitments
      *
-     * @param gadget - BoardGadget holding board util object
+     * @param board - board object storing state + marshalling state into witness format
      * @return - tuple of references to ship commitments ([0..10]), board commitment ([10])
      */
     fn load_commitments(
         &self,
         layouter: &mut impl Layouter<F>,
-        gadget: BoardGadget<F>,
+        board: Board,
     ) -> Result<Commitments<F>, Error>;
 
     /**
      * Load each commitment into a bits2num chip to get constrained 100 bit decompositions
      *
-     * @param gadget - BoardGadget functionality
+     * @param board - board object storing state + commmitment decompose functionality
      * @param commitments - assigned cells of commitments
      */
     fn decompose_commitments(
         &self,
         layouter: &mut impl Layouter<F>,
-        gadget: BoardGadget<F>,
+        board: Board,
         commitment: &Commitments<F>,
     ) -> Result<Placements<F>, Error>;
 
@@ -118,14 +142,14 @@ pub trait BoardInstructions<F: FieldExt> {
     /**
      * Transpose ship placement bit decompositions into a single board and recompose into a single commitment
      *
-     * @param gadget - board gadget
+     * @param board - board object storing state commitments transpose into
      * @param placements - reference to assigned cells of bits2num decomposed ship commitments
      * @return - reference to transposed binary decomposition representing board commitment
      */
     fn transpose_placements(
         &self,
         layouter: &mut impl Layouter<F>,
-        gadget: BoardGadget<F>,
+        board: Board,
         placements: Placements<F>,
     ) -> Result<PlacementBits<F>, Error>;
 }
@@ -252,17 +276,17 @@ impl<F: FieldExt> BoardChip<F> {
     /**
      * Synthesize a proof of a valid board
      *
-     * @param gadget - helper
+     * @param board - board object storing state + witness/ trace utility functions
      */
     pub fn synthesize(
         &self,
         mut layouter: impl Layouter<F>,
-        gadget: BoardGadget<F>,
+        board: Board,
     ) -> Result<(), Error> {
-        let commitments = self.load_commitments(&mut layouter, gadget)?;
-        let placements = self.decompose_commitments(&mut layouter, gadget, &commitments)?;
-        self.synth_placements(&mut layouter, gadget.board.ships, placements.clone())?;
-        let transposed = self.transpose_placements(&mut layouter, gadget, placements.clone())?;
+        let commitments = self.load_commitments(&mut layouter, board)?;
+        let placements = self.decompose_commitments(&mut layouter, board, &commitments)?;
+        self.synth_placements(&mut layouter, board.ships, placements.clone())?;
+        let transposed = self.transpose_placements(&mut layouter, board, placements.clone())?;
         Ok(())
     }
 }
@@ -271,16 +295,16 @@ impl<F: FieldExt> BoardInstructions<F> for BoardChip<F> {
     fn load_commitments(
         &self,
         layouter: &mut impl Layouter<F>,
-        gadget: BoardGadget<F>,
+        board: Board,
     ) -> Result<Commitments<F>, Error> {
         let assigned: [AssignedCell<F, F>; 10] = layouter.assign_region(
             || "load ship placements",
             |mut region: Region<F>| {
                 // assign ship commitments
-                let ship_commitments = gadget.private_witness();
+                let ship_commitments = board.witness_field();
                 let mut cells = Vec::<AssignedCell<F, F>>::new();
                 for i in 0..10 {
-                    let label = BoardGadget::<F>::commitment_label(i);
+                    let label = commitment_label(i);
                     cells.push(region.assign_advice(
                         || format!("{} ship commitment", label),
                         self.config.advice[i],
@@ -298,14 +322,14 @@ impl<F: FieldExt> BoardInstructions<F> for BoardChip<F> {
     fn decompose_commitments(
         &self,
         layouter: &mut impl Layouter<F>,
-        gadget: BoardGadget<F>,
+        board: Board,
         commitments: &Commitments<F>,
     ) -> Result<Placements<F>, Error> {
-        let bits = gadget.decompose_bits();
+        let bits = board.witness_decompose();
         let mut placements = Vec::<PlacementBits<F>>::new();
         for i in 0..10 {
             let num2bits = Num2BitsChip::<F, BOARD_SIZE>::new(commitments[i].clone(), bits[i]);
-            let label = BoardGadget::<F>::commitment_label(i);
+            let label = commitment_label(i);
             let assigned_bits = num2bits.synthesize(
                 self.config.num2bits[i],
                 layouter.namespace(|| format!("{} bits2num", label)),
@@ -357,12 +381,12 @@ impl<F: FieldExt> BoardInstructions<F> for BoardChip<F> {
     fn transpose_placements(
         &self,
         layouter: &mut impl Layouter<F>,
-        gadget: BoardGadget<F>,
+        board: Board,
         placements: Placements<F>,
     ) -> Result<PlacementBits<F>, Error> {
         let chip = TransposeChip::<F>::new(self.config.transpose);
-        let bits = gadget.board.state.bitfield::<F, BOARD_SIZE>();
-        let commitment = F::from_u128(gadget.board.state.lower_u128());
+        let bits = board.state.bitfield::<F, BOARD_SIZE>();
+        let commitment = F::from_u128(board.state.lower_u128());
         Ok(chip
             .synthesize(layouter, commitment, bits, placements)
             .unwrap())

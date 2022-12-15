@@ -1,6 +1,5 @@
 use {
     crate::{
-        board::gadget::PrivateInput,
         utils::{
             binary::BinaryValue,
             ship::{Ship, ShipType},
@@ -209,11 +208,11 @@ impl Board {
     }
 
     /**
-     * Generates the private witness input representing the board
+     * Format the shot commitments as needed for the private witness inputs for a Board proof
      *
-     * @return
+     * @return - array of H/V shot commitments values for each ship to witness
      */
-    pub fn private_witness(self) -> PrivateInput {
+    pub fn witness(self) -> [BinaryValue; 10] {
         let mut full_witness = Vec::<BinaryValue>::new();
         for ship in self.ships.iterator() {
             let witness = if ship.is_none() {
@@ -224,9 +223,35 @@ impl Board {
             full_witness.push(witness[0]);
             full_witness.push(witness[1]);
         }
-        PrivateInput {
-            0: full_witness.try_into().unwrap(),
-        }
+        full_witness.try_into().unwrap()
+    }
+
+    /**
+     * Returns ship commitments for board as field elements
+     *
+     * @return - witness return values as field elements
+     */
+    pub fn witness_field<F: FieldExt>(self) -> [F; 10] {
+        self.witness()
+            .iter()
+            .map(|commitment| F::from_u128(commitment.lower_u128()))
+            .collect::<Vec<F>>()
+            .try_into()
+            .unwrap()
+    }
+
+    /**
+     * Returns ship commitments as decomposed 100-bit arrays
+     *
+     * @return - binary decompositions of each placement on a given prime field
+     */
+    pub fn witness_decompose<F: FieldExt>(self) -> [[F; BOARD_SIZE]; 10] {
+        self.witness()
+            .iter()
+            .map(|commitment| commitment.bitfield::<F, BOARD_SIZE>())
+            .collect::<Vec<[F; BOARD_SIZE]>>()
+            .try_into()
+            .unwrap()
     }
 
     /**
@@ -350,7 +375,9 @@ mod test {
         println!("    C B R S D");
         for i in 0..BOARD_SIZE {
             let mut row = format!("{}|", i);
-            if i / 10 == 0 { row = format!(" {}", row)};
+            if i / 10 == 0 {
+                row = format!(" {}", row)
+            };
             for j in 0..bits.len() {
                 row = format!("{} {}", row, bits[j].value[i] as u8)
             }
@@ -368,7 +395,9 @@ mod test {
         println!("    C B R S D");
         for i in 0..BOARD_SIZE {
             let mut row = format!("{}|", i);
-            if i / 10 == 0 { row = format!(" {}", row)};
+            if i / 10 == 0 {
+                row = format!(" {}", row)
+            };
             for j in 0..bits.len() {
                 row = format!("{} {}", row, bits[j].value[i] as u8)
             }

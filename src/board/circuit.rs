@@ -1,9 +1,6 @@
 use {
     crate::{
-        board::{
-            chip::{BoardChip, BoardConfig},
-            gadget::BoardGadget,
-        },
+        board::chip::{BoardChip, BoardConfig},
         utils::board::Board,
     },
     halo2_proofs::{
@@ -11,11 +8,13 @@ use {
         circuit::{Layouter, SimpleFloorPlanner},
         plonk::{Circuit, ConstraintSystem, Error},
     },
+    std::marker::PhantomData
 };
 
 #[derive(Debug, Clone, Copy)]
 struct BoardCircuit<F: FieldExt> {
-    pub gadget: BoardGadget<F>,
+    pub board: Board,
+    _marker: PhantomData<F>
 }
 
 impl<F: FieldExt> Circuit<F> for BoardCircuit<F> {
@@ -32,7 +31,7 @@ impl<F: FieldExt> Circuit<F> for BoardCircuit<F> {
 
     fn synthesize(&self, config: Self::Config, layouter: impl Layouter<F>) -> Result<(), Error> {
         let chip = BoardChip::new(config);
-        chip.synthesize(layouter, self.gadget)
+        chip.synthesize(layouter, self.board)
     }
 }
 
@@ -46,7 +45,8 @@ impl<F: FieldExt> BoardCircuit<F> {
      */
     pub fn new(board: Board) -> BoardCircuit<F> {
         BoardCircuit {
-            gadget: BoardGadget::new(board),
+            board,
+            _marker: PhantomData
         }
     }
 }
