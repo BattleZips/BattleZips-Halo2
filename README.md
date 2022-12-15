@@ -3,11 +3,21 @@ BattleZips Halo 2 implementation
 
 TODO: FIX WITHOUT_WITNESS BY USING VALUE::UNKNOWN
 
-Board Circuit
-TODO
 
+## Circuits
 
-Shot Circuit
+### Board Circuit
+  - Inputs array of 10 private ship commitments corresponding to [`H5`, `V5`, `H4`, `V4`, `H3a`, `V3a`, `H3b`, `V3b`, `H2`, `V2`]
+  - For each pair ex: (`H5`, `V5`) constrain at least one of the values to be equal to `0`
+  - Constrained binary decomposition of all ship commitments into bits
+  - For each pair of decomposed bits, constrain individual ship placement via PlacementChip
+  - Once all placements pass, constrained transposition all decomposed ship commitments into one decomposed board commitment
+  - Constrained binary recomposition of board commitment bits into a single board state value
+  - Constrained poseidon hash of board state into board commitment
+    - in the future the board commitment will be signed hash and this is intermediate
+  - Publicly export board commitment from zero knowledge proof
+
+### Shot Circuit
   - Inputs `board_state`, `board_commitment`, `shot_commitment`, `hit_assertion`
      - `board_state` - private 100-bit number (constrained in Board Circuit) with flipped bits representing shot placements
      - `board_commitment` - the poseidon hash of `board_state` (to be signed hash in the future)
@@ -20,3 +30,21 @@ Shot Circuit
   - Constrains `board_commitment` to equal the constrained computation of the poseidon hash of `board_state`
     - in the future this will be one step later as the hash will be signed
   - Publicly export `board_commitment`, `shot_commitment`, `hit_assertion` from the zero knowledge proof
+
+## Chips
+TODO
+Note: does not include `BoardChip` and `ShotChip`, only auxiliary chips used by the main circuits
+
+### Bitify
+
+### Placement
+
+### Transpose
+
+## Todo
+ - EdDSA Signature Verification of `board_commitment` for shot and board
+ - final file structure refactor
+ - chip unit testing (test most functionality @ component chip level)
+ - production / real proof generation (basic)
+ - unit test full game
+ - full docs check
