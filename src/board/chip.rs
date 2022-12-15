@@ -6,17 +6,18 @@ use {
             primitives::PlacementBits,
         },
         transpose::chip::{TransposeChip, TransposeConfig},
-        utils::{
-            board::{Board, Deck, BOARD_SIZE},
-            ship::ShipType,
-        },
+        utils::board::{Board, Deck, BOARD_SIZE},
     },
-    halo2_gadgets::poseidon::{Pow5Chip, Pow5Config},
+    halo2_gadgets::poseidon::{
+        primitives::{ConstantLength, Spec},
+        Hash, Pow5Chip, Pow5Config,
+    },
     halo2_proofs::{
         arithmetic::FieldExt,
         circuit::{AssignedCell, Chip, Layouter, Region, Value},
         plonk::{
-            Advice, Column, ConstraintSystem, Constraints, Error, Expression, Fixed, Selector,
+            Advice, Column, ConstraintSystem, Constraints, Error, Expression, Fixed, Instance,
+            Selector,
         },
         poly::Rotation,
     },
@@ -67,9 +68,10 @@ pub struct BoardConfig<F: FieldExt> {
     pub bits2num: BitifyConfig,
     pub placement: PlacementConfigs<F>,
     pub transpose: TransposeConfig<F>,
-    // pub poseidon: Pow5Config<F, 3, 2>,
+    pub poseidon: Pow5Config<F, 3, 2>,
     pub advice: [Column<Advice>; 11],
-    pub fixed: [Column<Fixed>; 1],
+    pub fixed: [Column<Fixed>; 6],
+    pub instance: Column<Instance>,
     pub selectors: [Selector; 1],
     _marker: PhantomData<F>,
 }
@@ -79,11 +81,12 @@ pub struct BoardConfig<F: FieldExt> {
  *    * prove 5 types of ships placed correctly
  *    * prove public commitment is the signed poseidon hash of board integer
  */
-pub struct BoardChip<F: FieldExt> {
+pub struct BoardChip<S: Spec<F, 3, 2>, F: FieldExt> {
     config: BoardConfig<F>,
+    _marker: PhantomData<S>,
 }
 
-impl<F: FieldExt> Chip<F> for BoardChip<F> {
+impl<S: Spec<F, 3, 2>, F: FieldExt> Chip<F> for BoardChip<S, F> {
     type Config = BoardConfig<F>;
     type Loaded = ();
 
@@ -99,7 +102,7 @@ impl<F: FieldExt> Chip<F> for BoardChip<F> {
 /**
  * Instructions used by the board chip
  */
-pub trait BoardInstructions<F: FieldExt> {
+pub trait BoardInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
     /**
      * Load the 10 ship placement commitments
      *
@@ -113,7 +116,7 @@ pub trait BoardInstructions<F: FieldExt> {
     ) -> Result<Commitments<F>, Error>;
 
     /**
-     * Load each commitment into a bits2num chip to get constrained 100 bit decompositions
+     * Load each commitment into a num2bits chip to get constrained 100 bit decompositions
      *
      * @param board - board object storing state + commmitment decompose functionality
      * @param commitments - assigned cells of commitments
@@ -129,7 +132,7 @@ pub trait BoardInstructions<F: FieldExt> {
      * Load decomposed bits into placement chips
      *
      * @param ships - deck of ship placements
-     * @param placements - references to all assigned cells for bits2num decompositions
+     * @param placements - references to all assigned cells for num2bits decompositions
      * @return - Ok if placements were valid, and Errors otherwise
      */
     fn synth_placements(
@@ -143,7 +146,7 @@ pub trait BoardInstructions<F: FieldExt> {
      * Transpose ship placement bit decompositions into a single board and recompose into a single commitment
      *
      * @param board - board object storing state commitments transpose into
-     * @param placements - reference to assigned cells of bits2num decomposed ship commitments
+     * @param placements - reference to assigned cells of num2bits decomposed ship commitments
      * @return - reference to transposed binary decomposition representing board commitment
      */
     fn transpose_placements(
@@ -152,11 +155,40 @@ pub trait BoardInstructions<F: FieldExt> {
         board: Board,
         placements: Placements<F>,
     ) -> Result<PlacementBits<F>, Error>;
+
+    /**
+     * Recompose the bits from the board transposition instruciton into a single element
+     *
+     * @param board - the board object storing the bits/ composed element
+     * @param transposed - reference to assigned cells storing bits that represent serialized board state
+     * @return - if successful, return the binary composition in little endian order of the transposed bits
+     */
+    fn recompose_board(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        board: Board,
+        transposed: [AssignedCell<F, F>; BOARD_SIZE],
+    ) -> Result<AssignedCell<F, F>, Error>;
+
+    /**
+     * Constrained computation of poseidon hash of transposed board state
+     *
+     * @param preimage - assigned cell storing the transposed board state to hash
+     * @return - if successful, assigned cell storing the poseidon hash of the board state
+     */
+    fn hash_board(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        preimage: AssignedCell<F, F>,
+    ) -> Result<AssignedCell<F, F>, Error>;
 }
 
-impl<F: FieldExt> BoardChip<F> {
+impl<S: Spec<F, 3, 2>, F: FieldExt> BoardChip<S, F> {
     pub fn new(config: BoardConfig<F>) -> Self {
-        BoardChip { config }
+        BoardChip {
+            config,
+            _marker: PhantomData,
+        }
     }
 
     /**
@@ -174,12 +206,15 @@ impl<F: FieldExt> BoardChip<F> {
 
         // define fixed
         let mut fixed = Vec::<Column<Fixed>>::new();
-        for _ in 0..1 {
-            let col = meta.fixed_column();
-            meta.enable_constant(col);
-            fixed.push(col);
+        for _ in 0..6 {
+            fixed.push(meta.fixed_column());
         }
-        let fixed: [Column<Fixed>; 1] = fixed.try_into().unwrap();
+        let fixed: [Column<Fixed>; 6] = fixed.try_into().unwrap();
+        meta.enable_constant(fixed[0]);
+
+        // define instance column
+        let instance = meta.instance_column();
+        meta.enable_equality(instance);
 
         // define selectors
         let mut selectors = Vec::<Selector>::new();
@@ -188,7 +223,7 @@ impl<F: FieldExt> BoardChip<F> {
         }
         let selectors: [Selector; 1] = selectors.try_into().unwrap();
 
-        // define bits2num chips
+        // define num2bits chips
         let mut num2bits = Vec::<BitifyConfig>::new();
         for _ in 0..10 {
             num2bits.push(Num2BitsChip::<_, BOARD_SIZE>::configure(
@@ -196,8 +231,10 @@ impl<F: FieldExt> BoardChip<F> {
             ));
         }
         let num2bits: [BitifyConfig; 10] = num2bits.try_into().unwrap();
+
+        // define bits2num chip
         let bits2num = Bits2NumChip::<_, BOARD_SIZE>::configure(
-            meta, advice[0], advice[1], advice[2], fixed[0]
+            meta, advice[0], advice[1], advice[2], fixed[0],
         );
 
         // define placement chips
@@ -224,7 +261,13 @@ impl<F: FieldExt> BoardChip<F> {
             TransposeChip::<F>::configure(meta, advice[0..10].try_into().unwrap(), advice[10]);
 
         // define poseidon chip
-        // let poseidon = Pow5Chip::<F, 3, 2>::config(meta, )
+        let poseidon = Pow5Chip::<F, 3, 2>::configure::<S>(
+            meta,
+            [advice[0], advice[1], advice[2]],
+            advice[3],
+            [fixed[3], fixed[4], fixed[5]],
+            [fixed[0], fixed[1], fixed[2]], // flipped so fixed[0] is constant
+        );
 
         // define gates
         meta.create_gate("Commitment orientation H OR V == 0 constraint", |meta| {
@@ -266,8 +309,10 @@ impl<F: FieldExt> BoardChip<F> {
             bits2num,
             placement,
             transpose,
+            poseidon,
             advice,
             fixed,
+            instance,
             selectors,
             _marker: PhantomData,
         }
@@ -278,20 +323,28 @@ impl<F: FieldExt> BoardChip<F> {
      *
      * @param board - board object storing state + witness/ trace utility functions
      */
-    pub fn synthesize(
-        &self,
-        mut layouter: impl Layouter<F>,
-        board: Board,
-    ) -> Result<(), Error> {
+    pub fn synthesize(&self, mut layouter: impl Layouter<F>, board: Board) -> Result<(), Error> {
+        // load ship commitments into advice
         let commitments = self.load_commitments(&mut layouter, board)?;
+        // decompose commitments into 100 bits each
         let placements = self.decompose_commitments(&mut layouter, board, &commitments)?;
+        // run individual ship placement rule checks
         self.synth_placements(&mut layouter, board.ships, placements.clone())?;
-        let transposed = self.transpose_placements(&mut layouter, board, placements.clone())?;
+        // check that ships can all be placed together to form a valid board
+        let transposed_bits =
+            self.transpose_placements(&mut layouter, board, placements.clone())?;
+        // recompose the 100 bit board state into a single value
+        let transposed = self.recompose_board(&mut layouter, board, transposed_bits)?;
+        // hash the board state into public commitment
+        // @todo: add signing here to prevent known ciphertext attack
+        let commitment = self.hash_board(&mut layouter, transposed.clone())?;
+        // export constained board commitment to public instance column
+        layouter.constrain_instance(commitment.cell(), self.config.instance, 0)?;
         Ok(())
     }
 }
 
-impl<F: FieldExt> BoardInstructions<F> for BoardChip<F> {
+impl<S: Spec<F, 3, 2>, F: FieldExt> BoardInstructions<S, F> for BoardChip<S, F> {
     fn load_commitments(
         &self,
         layouter: &mut impl Layouter<F>,
@@ -332,7 +385,7 @@ impl<F: FieldExt> BoardInstructions<F> for BoardChip<F> {
             let label = commitment_label(i);
             let assigned_bits = num2bits.synthesize(
                 self.config.num2bits[i],
-                layouter.namespace(|| format!("{} bits2num", label)),
+                layouter.namespace(|| format!("{} num2bits", label)),
             )?;
             placements.push(PlacementBits::<F>::from(assigned_bits));
         }
@@ -390,5 +443,32 @@ impl<F: FieldExt> BoardInstructions<F> for BoardChip<F> {
         Ok(chip
             .synthesize(layouter, commitment, bits, placements)
             .unwrap())
+    }
+
+    fn recompose_board(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        board: Board,
+        transposed: [AssignedCell<F, F>; BOARD_SIZE],
+    ) -> Result<AssignedCell<F, F>, Error> {
+        Ok(
+            Bits2NumChip::<F, BOARD_SIZE>::new(F::from_u128(board.state.lower_u128()), transposed)
+                .synthesize(
+                    self.config.bits2num,
+                    layouter.namespace(|| "transposed bits2num"),
+                )?,
+        )
+    }
+
+    fn hash_board(
+        &self,
+        layouter: &mut impl Layouter<F>,
+        preimage: AssignedCell<F, F>,
+    ) -> Result<AssignedCell<F, F>, Error> {
+        let chip = Pow5Chip::construct(self.config.poseidon.clone());
+
+        let hasher =
+            Hash::<_, _, S, ConstantLength<1>, 3, 2>::init(chip, layouter.namespace(|| "hasher"))?;
+        hasher.hash(layouter.namespace(|| "hash"), [preimage])
     }
 }

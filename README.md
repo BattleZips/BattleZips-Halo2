@@ -1,12 +1,11 @@
 # BattleZips V2
 BattleZips Halo 2 implementation
 
-11.20.22: See `src/placement/circuit.rs` for demonstrable progress
+TODO: FIX WITHOUT_WITNESS BY USING VALUE::UNKNOWN
 
-Board Validity Circuit
-  - [x] Single Ship Placement Chip
-  - [ ] Transpose Placements to Board Chip
-  - [ ] EdDSA signed poseidon hash of board commitment
+Board Circuit
+TODO
+
 
 Shot Circuit
   - Inputs `board_state`, `board_commitment`, `shot_commitment`, `hit_assertion`

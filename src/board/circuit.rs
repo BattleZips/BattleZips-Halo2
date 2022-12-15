@@ -8,34 +8,37 @@ use {
         circuit::{Layouter, SimpleFloorPlanner},
         plonk::{Circuit, ConstraintSystem, Error},
     },
+    halo2_gadgets::poseidon::primitives::{P128Pow5T3, Spec, Hash, ConstantLength},
     std::marker::PhantomData
 };
 
 #[derive(Debug, Clone, Copy)]
-struct BoardCircuit<F: FieldExt> {
+struct BoardCircuit<S: Spec<F, 3, 2>, F: FieldExt> {
     pub board: Board,
-    _marker: PhantomData<F>
+    _field: PhantomData<F>,
+    _spec: PhantomData<S>
 }
 
-impl<F: FieldExt> Circuit<F> for BoardCircuit<F> {
+impl<S: Spec<F, 3, 2>, F: FieldExt> Circuit<F> for BoardCircuit<S, F> {
     type Config = BoardConfig<F>;
     type FloorPlanner = SimpleFloorPlanner;
 
     fn without_witnesses(&self) -> Self {
-        self.clone()
+        // @TODO fix
+        BoardCircuit::new(self.board)
     }
 
     fn configure(meta: &mut ConstraintSystem<F>) -> Self::Config {
-        BoardChip::configure(meta)
+        BoardChip::<S, F>::configure(meta)
     }
 
     fn synthesize(&self, config: Self::Config, layouter: impl Layouter<F>) -> Result<(), Error> {
-        let chip = BoardChip::new(config);
+        let chip = BoardChip::<S, F>::new(config);
         chip.synthesize(layouter, self.board)
     }
 }
 
-impl<F: FieldExt> BoardCircuit<F> {
+impl<S: Spec<F, 3, 2>, F: FieldExt> BoardCircuit<S, F> {
     /**
      * Construct a new board circuit given a commitment to ship placements
      * @dev handles all trace/ gadget construction given deck input
@@ -43,10 +46,11 @@ impl<F: FieldExt> BoardCircuit<F> {
      * @param ships - assignments for each of 5 ships to place on a board
      * @return - instantiated BoardCircuit object containing BoardGadget
      */
-    pub fn new(board: Board) -> BoardCircuit<F> {
+    pub fn new(board: Board) -> BoardCircuit<S, F> {
         BoardCircuit {
             board,
-            _marker: PhantomData
+            _field: PhantomData,
+            _spec: PhantomData
         }
     }
 }
@@ -71,9 +75,11 @@ mod test {
             [3, 4, 1, 5, 1],
             [true, false, false, true, false],
         ));
+        let board_commitment = Hash::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
+            .hash([Fp::from_u128(board.state.lower_u128())]);
         // construct BoardValidity circuit
-        let circuit = BoardCircuit::<Fp>::new(board);
-        let prover = MockProver::run(12, &circuit, vec![]).unwrap();
+        let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(board);
+        let prover = MockProver::run(12, &circuit, vec![vec![board_commitment]]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -81,7 +87,7 @@ mod test {
     fn print_circuit() {
         use plotters::prelude::*;
         let board = Board::from(&Deck::default());
-        let circuit = BoardCircuit::<Fp>::new(board);
+        let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(board);
         let root =
             BitMapBackend::new("src/board/board_layout.png", (1920, 1080)).into_drawing_area();
         root.fill(&WHITE).unwrap();
