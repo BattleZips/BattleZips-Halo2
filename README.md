@@ -48,3 +48,35 @@ Note: does not include `BoardChip` and `ShotChip`, only auxiliary chips used by 
  - production / real proof generation (basic)
  - unit test full game
  - full docs check
+
+
+## tests
+
+### board
+ [ ] 2x random board valid board proofs
+ [ ] try to place both a horizontal and vertical commitment
+ [ ] try to place neither a horizontal nor vertial commitment (not place a ship)
+ [ ] try to use a ship commitment with non-consecutive bits
+ [ ] try to place a ship that is technically consecutive but exceeds board row/col length of 10 (ex: 59, 60, 61)
+ [ ] try to place a ship that collides with another ship (without transpose)
+ [ ] try to place a ship that collides with another ship (with transpose)
+ [ ] try to provide wrong public board commitment
+
+### shot
+ [x] 2x hit = true valid shot proofs
+ [x] 2x hit = false valid shot proofs
+ [ ] try assert hit != 0 or 1
+ [ ] try to assert a hit when the shot missed
+ [ ] try to assert a shot when the hit missed
+ [ ] try to make a shot commitment of 0 (no shot)
+ [ ] try to make a shot commitment where multiple bits are flipped (multiple shots in one turn)
+ [ ] try to provide wrong public board commitment
+ [ ] try to provide wrong public hit assertion
+ [ ] try to provide wrong public shot commitment
+
+### integration test
+ - alice board placement
+ - bob board placement
+ - alice makes 17 hits
+ - bob makes 16 misses
+ - does not use mock prover, uses real proofs

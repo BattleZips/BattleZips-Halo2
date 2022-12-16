@@ -32,24 +32,24 @@ pub fn compute_shot_trace<F: FieldExt>(
     board: BinaryValue,
     shot: BinaryValue,
 ) -> [[F; BOARD_SIZE]; 2] {
-    let mut board_trace = Vec::<F>::new();
+    let mut hit_trace = Vec::<F>::new();
     let mut shot_trace = Vec::<F>::new();
 
     // assign first round manually
-    board_trace.push(F::from(board.value[0] && shot.value[0]));
+    hit_trace.push(F::from(board.value[0] && shot.value[0]));
     shot_trace.push(F::from(shot.value[0]));
     for i in 1..BOARD_SIZE {
-        // board_trace: if board and shot have flipped bit, prev board_trace + 1 else prev board trace
+        // hit_trace: if board and shot have flipped bit, prev hit_trace + 1 else prev hit trace
         let condition = board.value[i] && shot.value[i];
-        let new_board_trace = board_trace[board_trace.len() - 1] + F::from(condition);
-        board_trace.push(new_board_trace);
+        let new_hit_trace = hit_trace[hit_trace.len() - 1] + F::from(condition);
+        hit_trace.push(new_hit_trace);
         // shot_trace: prev shot_trace + shot_trace
         let new_shot_trace = shot_trace[shot_trace.len() - 1] + F::from(shot.value[i]);
         shot_trace.push(new_shot_trace);
     }
     [
-        board_trace.try_into().unwrap(),
         shot_trace.try_into().unwrap(),
+        hit_trace.try_into().unwrap(),
     ]
 }
 
@@ -245,7 +245,7 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotChip<S, F> {
 
         meta.create_gate("shot running sum row", |meta| {
             // query cells used in gate
-            let board_bit = meta.query_advice(advice[0], Rotation::cur());
+            let hit_bit = meta.query_advice(advice[0], Rotation::cur());
             let shot_bit = meta.query_advice(advice[1], Rotation::cur());
             let shot_sum = meta.query_advice(advice[2], Rotation::cur());
             let hit_sum = meta.query_advice(advice[3], Rotation::cur());
@@ -253,7 +253,7 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotChip<S, F> {
             let prev_hit_sum = meta.query_advice(advice[3], Rotation::prev());
             // constraint expressions
             let shot_constraint = shot_bit.clone() + prev_shot_sum - shot_sum;
-            let hit_constraint = board_bit * shot_bit + prev_hit_sum - hit_sum;
+            let hit_constraint = hit_bit * shot_bit + prev_hit_sum - hit_sum;
             // constrain using selector[1]
             // - shot bit sum = shot bit count = prev shot bit sum
             // - if board hit sum = if board bit == 1 and shot bit == 1 increment by 1 from prev
@@ -441,13 +441,13 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotInstructions<S, F> for ShotChip<S, F> {
                 // assign rows
                 for i in 0..BOARD_SIZE {
                     // permute bits for row
-                    bits[0][i].copy_advice(
+                    let x1 = bits[0][i].copy_advice(
                         || format!("copy board bit {}", i),
                         &mut region,
                         self.config.advice[0],
                         i + 1,
                     )?;
-                    bits[1][i].copy_advice(
+                    let x2 = bits[1][i].copy_advice(
                         || format!("copy shot bit {}", i),
                         &mut region,
                         self.config.advice[1],

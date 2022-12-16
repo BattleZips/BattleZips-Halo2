@@ -91,7 +91,80 @@ mod test {
         ];
         // construct BoardValidity circuit
         let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state, shot, hit);
-        let prover = MockProver::run(12, &circuit, vec![public_inputs]);
+        let prover = MockProver::run(9, &circuit, vec![public_inputs]);
+        assert_eq!(prover.unwrap().verify(), Ok(()));
+    }
+
+    #[test]
+    fn valid_hit_1() {
+        // construct valid battleship board
+        // let board = Board::from(&Deck::default());
+        let board = Board::from(&Deck::from(
+            [3, 9, 0, 0, 6],
+            [4, 6, 0, 6, 1],
+            [false, true, false, false, true],
+        ));
+        let shot = [9, 8];
+        let hit = true;
+        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
+            .hash([Fp::from_u128(board.state.lower_u128())]);
+        let public_inputs = vec![
+            hashed, 
+            Fp::from_u128(serialize(shot[0], shot[1]).lower_u128()),
+            Fp::from(hit),
+        ];
+        // construct BoardValidity circuit
+        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state, shot, hit);
+        let prover = MockProver::run(9, &circuit, vec![public_inputs]);
+        assert_eq!(prover.unwrap().verify(), Ok(()));
+    }
+
+    #[test]
+    fn valid_miss_0() {
+        // construct valid battleship board
+        // let board = Board::from(&Deck::default());
+        let board = Board::from(&Deck::from(
+            [3, 5, 0, 0, 6],
+            [3, 4, 1, 5, 1],
+            [true, false, false, true, false],
+        ));
+        let shot = [4u8, 3];
+        let hit = false;
+        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
+            .hash([Fp::from_u128(board.state.lower_u128())]);
+        let public_inputs = vec![
+            hashed, 
+            Fp::from_u128(serialize(shot[0], shot[1]).lower_u128()),
+            Fp::from(hit),
+        ];
+        // construct BoardValidity circuit
+        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state, shot, hit);
+        let prover = MockProver::run(9, &circuit, vec![public_inputs]);
+        assert_eq!(prover.unwrap().verify(), Ok(()));
+    }
+
+    #[test]
+    fn valid_miss_1() {
+        // construct valid battleship board
+        // let board = Board::from(&Deck::default());
+        let board = Board::from(&Deck::from(
+            [3, 9, 0, 0, 6],
+            [4, 6, 0, 6, 1],
+            [false, true, false, false, true],
+        ));
+        let shot = [3u8, 3];
+        let shot_commitment = serialize(shot[0], shot[1]);
+        let hit = false;
+        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
+            .hash([Fp::from_u128(board.state.lower_u128())]);
+        let public_inputs = vec![
+            hashed, 
+            Fp::from_u128(serialize(shot[0], shot[1]).lower_u128()),
+            Fp::from(hit),
+        ];
+        // construct BoardValidity circuit
+        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state, shot, hit);
+        let prover = MockProver::run(9, &circuit, vec![public_inputs]);
         assert_eq!(prover.unwrap().verify(), Ok(()));
     }
 
