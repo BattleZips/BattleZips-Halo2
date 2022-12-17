@@ -233,7 +233,7 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotChip<S, F> {
         );
 
         // define gates
-        meta.create_gate("boolean hit assetion", |meta| {
+        meta.create_gate("boolean hit assertion", |meta| {
             let assertion = meta.query_advice(input, Rotation::cur());
             let one = Expression::Constant(F::one());
             let constraint = (one - assertion.clone()) * assertion.clone();
@@ -317,7 +317,7 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotChip<S, F> {
         mut layouter: impl Layouter<F>,
         board: BinaryValue,
         shot: BinaryValue,
-        hit: bool,
+        hit: BinaryValue,
     ) -> Result<(), Error> {
         // compute values to witness
         let board_state = F::from_u128(board.lower_u128());
@@ -334,7 +334,7 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotChip<S, F> {
             board_state,
             board_commitment,
             shot_commitment,
-            F::from(hit),
+            F::from_u128(hit.lower_u128()),
         )?;
         // decompose board_state and ship_commitment into constrained bits
         let assigned_bits =

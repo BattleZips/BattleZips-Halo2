@@ -65,7 +65,7 @@ Note: does not include `BoardChip` and `ShotChip`, only auxiliary chips used by 
 ### shot
  [x] 2x hit = true valid shot proofs
  [x] 2x hit = false valid shot proofs
- [ ] try assert hit != 0 or 1
+ [x] try assert hit != 0 or 1
  [ ] try to assert a hit when the shot missed
  [ ] try to assert a shot when the hit missed
  [ ] try to make a shot commitment of 0 (no shot)

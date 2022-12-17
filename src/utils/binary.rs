@@ -17,6 +17,14 @@ impl BinaryValue {
         BinaryValue { value }
     }
 
+    // return a 256 bit number from an 8 bit number
+    pub fn from_u8(value: u8) -> BinaryValue {
+        BinaryValue {
+            value: U256::new([value as u64, 0, 0, 0])
+        }
+    }
+
+
     // wrap an empty 256 bit BitArray in BinaryValue object
     pub fn empty() -> BinaryValue {
         BinaryValue::new(BitArray::ZERO)
