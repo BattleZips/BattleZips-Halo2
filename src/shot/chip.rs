@@ -6,7 +6,7 @@ use {
         utils::{binary::BinaryValue, board::BOARD_SIZE},
     },
     halo2_gadgets::poseidon::{
-        primitives::{P128Pow5T3, Spec},
+        primitives::Spec,
         Hash, Pow5Chip, Pow5Config,
     },
     halo2_proofs::{
