@@ -66,10 +66,11 @@ Note: does not include `BoardChip` and `ShotChip`, only auxiliary chips used by 
  [x] 2x hit = true valid shot proofs
  [x] 2x hit = false valid shot proofs
  [x] try assert hit != 0 or 1
- [ ] try to assert a hit when the shot missed
- [ ] try to assert a shot when the hit missed
- [ ] try to make a shot commitment of 0 (no shot)
- [ ] try to make a shot commitment where multiple bits are flipped (multiple shots in one turn)
+ [x] try to assert a hit when the shot missed
+ [x] try to assert a shot when the hit missed
+ [x] try to make a shot commitment of 0 (no shot)
+ [x] try to make a shot commitment where multiple bits are flipped (multiple shots in one turn)
+ [x] try to make a shot commitment where there are multiple hits (extension of multiple shots)
  [ ] try to provide wrong public board commitment
  [ ] try to provide wrong public hit assertion
  [ ] try to provide wrong public shot commitment

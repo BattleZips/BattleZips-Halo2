@@ -1,7 +1,10 @@
 use {
     crate::{
         shot::chip::{ShotChip, ShotConfig},
-        utils::{binary::BinaryValue, shot::serialize},
+        utils::{
+            binary::{BinaryValue, U256},
+            shot::serialize,
+        },
     },
     halo2_gadgets::poseidon::primitives::{P128Pow5T3, Spec},
     halo2_proofs::{
@@ -82,7 +85,7 @@ mod test {
             [3, 4, 1, 5, 1],
             [true, false, false, true, false],
         ));
-        let shot = serialize(3u8, 5);
+        let shot = serialize::<1>([3], [5]);
         let hit = BinaryValue::from_u8(1);
         let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
             .hash([Fp::from_u128(board.state.lower_u128())]);
@@ -105,7 +108,7 @@ mod test {
             [4, 6, 0, 6, 1],
             [false, true, false, false, true],
         ));
-        let shot = serialize(9, 8);
+        let shot = serialize::<1>([9], [8]);
         let hit = BinaryValue::from_u8(1);
         let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
             .hash([Fp::from_u128(board.state.lower_u128())]);
@@ -128,7 +131,7 @@ mod test {
             [3, 4, 1, 5, 1],
             [true, false, false, true, false],
         ));
-        let shot = serialize(4, 3);
+        let shot = serialize::<1>([4], [3]);
         let hit = BinaryValue::from_u8(0);
         let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
             .hash([Fp::from_u128(board.state.lower_u128())]);
@@ -152,7 +155,7 @@ mod test {
             [false, true, false, false, true],
         ));
         // make a shot that misses this board configuration
-        let shot = serialize(3, 3);
+        let shot = serialize::<1>([3], [3]);
         // assert the shot misses
         let hit = BinaryValue::from_u8(0);
         // get the Poseidon hash of the board state
@@ -179,7 +182,7 @@ mod test {
             [false, true, false, false, true],
         ));
         // make a shot that hits this board configuration
-        let shot = serialize(9, 8);
+        let shot = serialize::<1>([9], [8]);
         // assert a non-boolean value for hit
         let hit = BinaryValue::from_u8(2);
         // get the Poseidon hash of the board state
@@ -242,7 +245,7 @@ mod test {
             [false, true, false, false, true],
         ));
         // make a shot that misses this board configuration
-        let shot = serialize(8, 8);
+        let shot = serialize::<1>([8], [8]);
         // assert that this shot hits the board configuration
         let hit = BinaryValue::from_u8(1);
         // get the Poseidon hash of the board state
@@ -258,8 +261,9 @@ mod test {
         let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state, shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
         // expect failure
-        assert_eq!(prover.verify(), Err(vec![
-            VerifyFailure::ConstraintNotSatisfied {
+        assert_eq!(
+            prover.verify(),
+            Err(vec![VerifyFailure::ConstraintNotSatisfied {
                 // fail constraint: count 0 hits but 1 inputted
                 constraint: (
                     (7, "constrain shot running sum output").into(),
@@ -275,10 +279,10 @@ mod test {
                     (((Any::Advice, 0).into(), 0).into(), String::from("1")),
                     (((Any::Advice, 2).into(), 0).into(), String::from("0"))
                 ]
-            }
-        ]));
+            }])
+        );
     }
-    
+
     #[test]
     fn invalid_assert_miss_when_hit() {
         // construct battleship board pattern 1
@@ -288,7 +292,7 @@ mod test {
             [true, false, false, true, false],
         ));
         // make a shot that misses this board configuration
-        let shot = serialize(7, 1);
+        let shot = serialize::<1>([7], [1]);
         // assert that this shot hits the board configuration
         let hit = BinaryValue::from_u8(0);
         // get the Poseidon hash of the board state
@@ -304,8 +308,9 @@ mod test {
         let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state, shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
         // expect failure
-        assert_eq!(prover.verify(), Err(vec![
-            VerifyFailure::ConstraintNotSatisfied {
+        assert_eq!(
+            prover.verify(),
+            Err(vec![VerifyFailure::ConstraintNotSatisfied {
                 // fail constraint: count 1 hits but 0 inputted
                 constraint: (
                     (7, "constrain shot running sum output").into(),
@@ -321,8 +326,160 @@ mod test {
                     (((Any::Advice, 0).into(), 0).into(), String::from("0")),
                     (((Any::Advice, 2).into(), 0).into(), String::from("1"))
                 ]
-            }
-        ]));
+            }])
+        );
+    }
+
+    #[test]
+    fn invalid_no_shot() {
+        // construct battleship board pattern 1
+        let board = Board::from(&Deck::from(
+            [3, 5, 0, 0, 6],
+            [3, 4, 1, 5, 1],
+            [true, false, false, true, false],
+        ));
+        // make a shot that misses this board configuration
+        let shot = BinaryValue::new(U256::from([0, 0, 0, 0]));
+        // assert that this shot misses the board configuration
+        let hit = BinaryValue::from_u8(0);
+        // get the Poseidon hash of the board state
+        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
+            .hash([Fp::from_u128(board.state.lower_u128())]);
+        // specify the public exports from the proof
+        let public_exports = vec![
+            hashed,
+            Fp::from_u128(shot.lower_u128()),
+            Fp::from_u128(hit.lower_u128()),
+        ];
+        // mock prove BoardCircuit
+        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state, shot, hit);
+        let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
+        // expect failure
+        assert_eq!(
+            prover.verify(),
+            Err(vec![VerifyFailure::ConstraintNotSatisfied {
+                // fail constraint: 0 shots counted when 1 expected
+                constraint: (
+                    (7, "constrain shot running sum output").into(),
+                    0,
+                    "Shot only fires at one board cell"
+                )
+                    .into(),
+                location: FailureLocation::InRegion {
+                    region: (4, "shot running sum output checks").into(),
+                    offset: 0
+                },
+                cell_values: vec![(((Any::Advice, 1).into(), 0).into(), String::from("0")),]
+            }])
+        );
+    }
+
+    #[test]
+    fn invalid_multi_shot() {
+        // construct battleship board pattern 1
+        let board = Board::from(&Deck::from(
+            [3, 5, 0, 0, 6],
+            [3, 4, 1, 5, 1],
+            [true, false, false, true, false],
+        ));
+        // make one shot that misses and one that hits in a single commitment
+        let shot = serialize::<2>([3, 9], [3, 9]);
+        // assert that this shot hits the board configuration
+        let hit = BinaryValue::from_u8(1);
+        // get the Poseidon hash of the board state
+        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
+            .hash([Fp::from_u128(board.state.lower_u128())]);
+        // specify the public exports from the proof
+        let public_exports = vec![
+            hashed,
+            Fp::from_u128(shot.lower_u128()),
+            Fp::from_u128(hit.lower_u128()),
+        ];
+        // mock prove BoardCircuit
+        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state, shot, hit);
+        let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
+        // expect failure
+        assert_eq!(
+            prover.verify(),
+            Err(vec![VerifyFailure::ConstraintNotSatisfied {
+                // fail constraint: 2 shots counted when 1 expected
+                constraint: (
+                    (7, "constrain shot running sum output").into(),
+                    0,
+                    "Shot only fires at one board cell"
+                )
+                    .into(),
+                location: FailureLocation::InRegion {
+                    region: (4, "shot running sum output checks").into(),
+                    offset: 0
+                },
+                cell_values: vec![(((Any::Advice, 1).into(), 0).into(), String::from("0x2")),]
+            }])
+        );
+    }
+
+    #[test]
+    fn invalid_multi_hit() {
+        // construct battleship board pattern 2
+        let board = Board::from(&Deck::from(
+            [3, 9, 0, 0, 6],
+            [4, 6, 0, 6, 1],
+            [false, true, false, false, true],
+        ));
+        // make three shots that all hit
+        let shot = serialize::<3>([0, 1, 2], [0, 0, 0]);
+        // assert that this shot hits the board configuration
+        // @dev could either constrain this way which will count wrong # of hits, or nonzero hit assertion
+        let hit = BinaryValue::from_u8(1);
+        // get the Poseidon hash of the board state
+        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
+            .hash([Fp::from_u128(board.state.lower_u128())]);
+        // specify the public exports from the proof
+        let public_exports = vec![
+            hashed,
+            Fp::from_u128(shot.lower_u128()),
+            Fp::from_u128(hit.lower_u128()),
+        ];
+        // mock prove BoardCircuit
+        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state, shot, hit);
+        let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
+        // expect failure
+        assert_eq!(
+            prover.verify(),
+            Err(vec![
+                VerifyFailure::ConstraintNotSatisfied {
+                    // fail constraint: 3 shots counted when 1 expected
+                    constraint: (
+                        (7, "constrain shot running sum output").into(),
+                        0,
+                        "Shot only fires at one board cell"
+                    )
+                        .into(),
+                    location: FailureLocation::InRegion {
+                        region: (4, "shot running sum output checks").into(),
+                        offset: 0
+                    },
+                    cell_values: vec![(((Any::Advice, 1).into(), 0).into(), String::from("0x3")),]
+                },
+                VerifyFailure::ConstraintNotSatisfied {
+                    // fail constraint: count 1 hits but 0 inputted
+                    constraint: (
+                        (7, "constrain shot running sum output").into(),
+                        1,
+                        "Public hit assertion matches private witness"
+                    )
+                        .into(),
+                    location: FailureLocation::InRegion {
+                        region: (4, "shot running sum output checks").into(),
+                        offset: 0
+                    },
+                    cell_values: vec![
+                        (((Any::Advice, 0).into(), 0).into(), String::from("1")),
+                        (((Any::Advice, 2).into(), 0).into(), String::from("0x3"))
+                    ]
+                }
+            ])
+        );
     }
     // #[test]
     // fn print_circuit() {
