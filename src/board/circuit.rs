@@ -3,20 +3,20 @@ use {
         board::chip::{BoardChip, BoardConfig},
         utils::board::Board,
     },
+    halo2_gadgets::poseidon::primitives::{ConstantLength, Hash, P128Pow5T3, Spec},
     halo2_proofs::{
         arithmetic::FieldExt,
         circuit::{Layouter, SimpleFloorPlanner},
         plonk::{Circuit, ConstraintSystem, Error},
     },
-    halo2_gadgets::poseidon::primitives::{P128Pow5T3, Spec, Hash, ConstantLength},
-    std::marker::PhantomData
+    std::marker::PhantomData,
 };
 
 #[derive(Debug, Clone, Copy)]
 struct BoardCircuit<S: Spec<F, 3, 2>, F: FieldExt> {
     pub board: Board,
     _field: PhantomData<F>,
-    _spec: PhantomData<S>
+    _spec: PhantomData<S>,
 }
 
 impl<S: Spec<F, 3, 2>, F: FieldExt> Circuit<F> for BoardCircuit<S, F> {
@@ -50,7 +50,7 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardCircuit<S, F> {
         BoardCircuit {
             board,
             _field: PhantomData,
-            _spec: PhantomData
+            _spec: PhantomData,
         }
     }
 }
@@ -68,12 +68,26 @@ mod test {
 
     #[test]
     fn valid_0() {
-        // construct valid battleship board
-        // let board = Board::from(&Deck::default());
         let board = Board::from(&Deck::from(
             [3, 5, 0, 0, 6],
             [3, 4, 1, 5, 1],
             [true, false, false, true, false],
+        ));
+        let board_commitment = Hash::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
+            .hash([Fp::from_u128(board.state.lower_u128())]);
+        // construct BoardValidity circuit
+        let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(board);
+        let prover = MockProver::run(12, &circuit, vec![vec![board_commitment]]).unwrap();
+        assert_eq!(prover.verify(), Ok(()));
+    }
+
+    #[test]
+    fn valid_1() {
+        // construct battleship board pattern #2
+        let board = Board::from(&Deck::from(
+            [3, 9, 0, 0, 6],
+            [4, 6, 0, 6, 1],
+            [false, true, false, false, true],
         ));
         let board_commitment = Hash::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
             .hash([Fp::from_u128(board.state.lower_u128())]);

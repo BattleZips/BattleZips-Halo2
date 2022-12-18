@@ -398,36 +398,36 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardInstructions<S, F> for BoardChip<S, F> 
         ships: Deck,
         placements: Placements<F>,
     ) -> Result<(), Error> {
-        PlacementChip::<F, 5>::new(self.config.placement.carrier).synthesize(
-            layouter,
-            ships.carrier.unwrap(),
-            placements[0].clone(),
-            placements[1].clone(),
-        )?;
+        // PlacementChip::<F, 5>::new(self.config.placement.carrier).synthesize(
+        //     layouter,
+        //     ships.carrier.unwrap(),
+        //     placements[0].clone(),
+        //     placements[1].clone(),
+        // )?;
         PlacementChip::<F, 4>::new(self.config.placement.battleship).synthesize(
             layouter,
             ships.battleship.unwrap(),
             placements[2].clone(),
             placements[3].clone(),
         )?;
-        PlacementChip::<F, 3>::new(self.config.placement.cruiser).synthesize(
-            layouter,
-            ships.cruiser.unwrap(),
-            placements[4].clone(),
-            placements[5].clone(),
-        )?;
-        PlacementChip::<F, 3>::new(self.config.placement.submarine).synthesize(
-            layouter,
-            ships.submarine.unwrap(),
-            placements[6].clone(),
-            placements[7].clone(),
-        )?;
-        PlacementChip::<F, 2>::new(self.config.placement.destroyer).synthesize(
-            layouter,
-            ships.destroyer.unwrap(),
-            placements[8].clone(),
-            placements[9].clone(),
-        )?;
+        // PlacementChip::<F, 3>::new(self.config.placement.cruiser).synthesize(
+        //     layouter,
+        //     ships.cruiser.unwrap(),
+        //     placements[4].clone(),
+        //     placements[5].clone(),
+        // )?;
+        // PlacementChip::<F, 3>::new(self.config.placement.submarine).synthesize(
+        //     layouter,
+        //     ships.submarine.unwrap(),
+        //     placements[6].clone(),
+        //     placements[7].clone(),
+        // )?;
+        // PlacementChip::<F, 2>::new(self.config.placement.destroyer).synthesize(
+        //     layouter,
+        //     ships.destroyer.unwrap(),
+        //     placements[8].clone(),
+        //     placements[9].clone(),
+        // )?;
         Ok(())
     }
 

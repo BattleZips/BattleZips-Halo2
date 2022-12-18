@@ -75,7 +75,7 @@ pub fn compute_placement_trace<F: FieldExt>(ship: Ship) -> PlacementTrace<F> {
     // compute full bit window trace
     trace = vec![increment(0)];
     for i in 1..bits.len() {
-        if i % 10 + length >= 10 {
+        if i % 10 + length > 10 {
             // permute case
             trace.push(trace[i - 1]);
         } else {
@@ -84,7 +84,6 @@ pub fn compute_placement_trace<F: FieldExt>(ship: Ship) -> PlacementTrace<F> {
         }
     }
     let full_window_sum: [F; BOARD_SIZE] = trace.try_into().unwrap();
-
     [bit_sum, full_window_sum]
 }
 
@@ -225,10 +224,10 @@ impl<F: FieldExt> PlacementState<F> {
 
             // toggle selectors
             config.s_sum_bits.enable(region, offset)?;
-            if adjusted_offset % 10 + S >= 10 {
+            if adjusted_offset % 10 + S > 10 {
                 config.s_permute.enable(region, offset)?;
             } else {
-                config.s_sum_bits.enable(region, offset)?;
+                config.s_adjacency.enable(region, offset)?;
             }
         }
         Ok(PlacementState {

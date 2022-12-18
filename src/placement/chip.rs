@@ -157,11 +157,6 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
             // query full bit window running sum at column (A^4)
             let prev_full_window_count = meta.query_advice(full_window_sum, Rotation::prev());
             let full_window_count = meta.query_advice(full_window_sum, Rotation::cur());
-            // constant expressions
-            let ship_len = Expression::Constant(F::from(S as u64));
-            let inverse_ship_len =
-                Expression::Constant(F::from(S as u64).invert().unwrap_or(F::zero()));
-            let one = Expression::Constant(F::one());
 
             /*
              * Raise a given expression to the given power

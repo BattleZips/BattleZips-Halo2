@@ -53,27 +53,27 @@ Note: does not include `BoardChip` and `ShotChip`, only auxiliary chips used by 
 ## tests
 
 ### board
- [ ] 2x random board valid board proofs
- [ ] try to place both a horizontal and vertical commitment
- [ ] try to place neither a horizontal nor vertial commitment (not place a ship)
- [ ] try to use a ship commitment with non-consecutive bits
- [ ] try to place a ship that is technically consecutive but exceeds board row/col length of 10 (ex: 59, 60, 61)
- [ ] try to place a ship that collides with another ship (without transpose)
- [ ] try to place a ship that collides with another ship (with transpose)
- [ ] try to provide wrong public board commitment
+ - [x] 2x random board valid board proofs
+ - [ ] try to place both a horizontal and vertical commitment
+ - [ ] try to place neither a horizontal nor vertial commitment (not place a ship)
+ - [ ] try to use a ship commitment with non-consecutive bits
+ - [ ] try to place a ship that is technically consecutive but exceeds board row/col length of 10 (ex: 59, 60, 61)
+ - [ ] try to place a ship that collides with another ship (without transpose)
+ - [ ] try to place a ship that collides with another ship (with transpose)
+ - [ ] try to provide wrong public board commitment
 
 ### shot
- [x] 2x hit = true valid shot proofs
- [x] 2x hit = false valid shot proofs
- [x] try assert hit != 0 or 1
- [x] try to assert a hit when the shot missed
- [x] try to assert a shot when the hit missed
- [x] try to make a shot commitment of 0 (no shot)
- [x] try to make a shot commitment where multiple bits are flipped (multiple shots in one turn)
- [x] try to make a shot commitment where there are multiple hits (extension of multiple shots)
- [ ] try to provide wrong public board commitment
- [ ] try to provide wrong public hit assertion
- [ ] try to provide wrong public shot commitment
+ - [x] 2x hit = true valid shot proofs
+ - [x] 2x hit = false valid shot proofs
+ - [x] try assert hit != 0 or 1
+ - [x] try to assert a hit when the shot missed
+ - [x] try to assert a shot when the hit missed
+ - [x] try to make a shot commitment of 0 (no shot)
+ - [x] try to make a shot commitment where multiple bits are flipped (multiple shots in one turn)
+ - [x] try to make a shot commitment where there are multiple hits (extension of multiple shots)
+ - [x] try to provide wrong public board commitment
+ - [x] try to provide wrong public hit assertion
+ - [x] try to provide wrong public shot commitment
 
 ### integration test
  - alice board placement
