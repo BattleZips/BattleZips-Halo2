@@ -1,6 +1,6 @@
 use {
     super::primitives::*,
-    crate::utils::{board::BOARD_SIZE, ship::Ship},
+    crate::utils::{board::BOARD_SIZE, binary::BinaryValue},
     halo2_proofs::{
         arithmetic::{lagrange_interpolate, FieldExt},
         circuit::{AssignedCell, Chip, Layouter, Region, Value},
@@ -57,9 +57,9 @@ pub trait PlacementInstructions<F: FieldExt, const S: usize> {
         &self,
         layouter: &mut impl Layouter<F>,
         bits: [F; BOARD_SIZE],
-        horizontal: PlacementBits<F>,
-        vertical: PlacementBits<F>,
-    ) -> Result<PlacementBits<F>, Error>;
+        horizontal: AssignedBits<F>,
+        vertical: AssignedBits<F>,
+    ) -> Result<AssignedBits<F>, Error>;
 
     /**
      * Generate the running sum for bit counts and full bit windows
@@ -71,7 +71,7 @@ pub trait PlacementInstructions<F: FieldExt, const S: usize> {
     fn placement_sums(
         &self,
         layouter: &mut impl Layouter<F>,
-        bits: PlacementBits<F>,
+        bits: AssignedBits<F>,
         trace: PlacementTrace<F>,
     ) -> Result<PlacementState<F>, Error>;
 
@@ -268,13 +268,13 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
     pub fn synthesize(
         &self,
         layouter: &mut impl Layouter<F>,
-        ship: Ship,
-        horizontal: PlacementBits<F>,
-        vertical: PlacementBits<F>,
+        ship: BinaryValue,
+        horizontal: AssignedBits<F>,
+        vertical: AssignedBits<F>,
     ) -> Result<(), Error> {
         // load values in memoru
-        let bits = ship.bits(true).bitfield();
-        let trace = compute_placement_trace::<F>(ship);
+        let bits = ship.bitfield();
+        let trace = compute_placement_trace::<F, S>(ship);
         // begin proof synthesis
         let assigned_bits = self.load_bits(layouter, bits, horizontal, vertical)?;
         let running_sums = self.placement_sums(layouter, assigned_bits, trace)?;
@@ -288,9 +288,9 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
         &self,
         layouter: &mut impl Layouter<F>,
         bits: [F; BOARD_SIZE],
-        horizontal: PlacementBits<F>,
-        vertical: PlacementBits<F>,
-    ) -> Result<PlacementBits<F>, Error> {
+        horizontal: AssignedBits<F>,
+        vertical: AssignedBits<F>,
+    ) -> Result<AssignedBits<F>, Error> {
         Ok(layouter.assign_region(
             || "permute and collapse bit decompositions",
             |mut region: Region<F>| {
@@ -316,7 +316,7 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
                         || Value::known(bits[i]),
                     )?);
                 }
-                Ok(PlacementBits::<F>::from(assigned.try_into().unwrap()))
+                Ok(AssignedBits::<F>::from(assigned.try_into().unwrap()))
             },
         )?)
     }
@@ -324,7 +324,7 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
     fn placement_sums(
         &self,
         layouter: &mut impl Layouter<F>,
-        bits2num: PlacementBits<F>,
+        bits2num: AssignedBits<F>,
         trace: PlacementTrace<F>,
     ) -> Result<PlacementState<F>, Error> {
         Ok(layouter.assign_region(

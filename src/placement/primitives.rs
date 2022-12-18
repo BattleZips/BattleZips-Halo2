@@ -1,7 +1,7 @@
 use {
     crate::{
         placement::chip::PlacementConfig,
-        utils::{board::BOARD_SIZE, ship::Ship},
+        utils::{binary::BinaryValue, board::BOARD_SIZE},
     },
     halo2_proofs::{
         arithmetic::FieldExt,
@@ -10,34 +10,8 @@ use {
     },
 };
 
-pub type PlacementBits<F> = [AssignedCell<F, F>; BOARD_SIZE];
+pub type AssignedBits<F> = [AssignedCell<F, F>; BOARD_SIZE];
 pub type PlacementTrace<F> = [[F; BOARD_SIZE]; 2];
-
-/**
- * Attempt to extract a bit window from the board state
- * @dev will throw error if bit window is out of bounds
- * @param S - the size of the bit window
- * @param offset - the board cell to start window forward look from
- * @return - array of length S containing consecutive AssignedCells in bit column
- */
-pub fn get_placement_window<F: FieldExt, const S: usize>(
-    bits: PlacementBits<F>,
-    offset: usize,
-) -> Result<[AssignedCell<F, F>; S], String> {
-    match offset % 10 + S > 9 || offset > 99 {
-        true => Err("bit window out of bounds".to_string()),
-        false => {
-            let bits: [AssignedCell<F, F>; S] = bits[offset..offset + S]
-                .to_vec()
-                .iter()
-                .map(|bit| bit.clone())
-                .collect::<Vec<AssignedCell<F, F>>>()
-                .try_into()
-                .unwrap();
-            Ok(bits)
-        }
-    }
-}
 
 /**
  * Given a ShipPlacement object, construct the running sum traces
@@ -45,11 +19,10 @@ pub fn get_placement_window<F: FieldExt, const S: usize>(
  * @param ship - ship helper object
  * @return - bit_sum and full_bit_window cell values for assignment
  */
-pub fn compute_placement_trace<F: FieldExt>(ship: Ship) -> PlacementTrace<F> {
-    // encode ship placement for arithemtization
-    // build computation trace
-    let length = ship.ship_type.length();
-    let bits = ship.bits(true).bitfield::<F, BOARD_SIZE>();
+pub fn compute_placement_trace<F: FieldExt, const S: usize>(
+    ship: BinaryValue,
+) -> PlacementTrace<F> {
+    let bits = ship.bitfield::<F, BOARD_SIZE>();
     // compute bit_sum trace
     let mut trace: Vec<F> = Vec::<F>::new();
     trace.push(bits[0]);
@@ -61,10 +34,10 @@ pub fn compute_placement_trace<F: FieldExt>(ship: Ship) -> PlacementTrace<F> {
     // function for returning increment
     // expects permute case check to be done lower in stack
     let increment = |offset: usize| {
-        let bit_count = bits[offset..offset + length]
+        let bit_count = bits[offset..offset + S]
             .iter()
             .fold(F::zero(), |sum: F, elem: &F| sum + elem);
-        let v = if bit_count.eq(&F::from(length as u64)) {
+        let v = if bit_count.eq(&F::from(S as u64)) {
             F::one()
         } else {
             F::zero()
@@ -75,7 +48,7 @@ pub fn compute_placement_trace<F: FieldExt>(ship: Ship) -> PlacementTrace<F> {
     // compute full bit window trace
     trace = vec![increment(0)];
     for i in 1..bits.len() {
-        if i % 10 + length > 10 {
+        if i % 10 + S > 10 {
             // permute case
             trace.push(trace[i - 1]);
         } else {
@@ -149,10 +122,10 @@ impl<F: FieldExt> PlacementState<F> {
      */
     pub fn permute_bits2num<const S: usize>(
         &mut self,
-        bits: &PlacementBits<F>,
+        bits: &AssignedBits<F>,
         region: &mut Region<F>,
         config: &PlacementConfig<F, S>,
-    ) -> Result<PlacementBits<F>, Error> {
+    ) -> Result<AssignedBits<F>, Error> {
         let mut permuted: Vec<AssignedCell<F, F>> = Vec::<AssignedCell<F, F>>::new();
         for i in 0..bits.len() {
             let bit = &bits[i];
@@ -163,7 +136,7 @@ impl<F: FieldExt> PlacementState<F> {
                 i + 1, // offset + 1 for padded row
             )?);
         }
-        Ok(PlacementBits::from(
+        Ok(AssignedBits::from(
             permuted
                 .iter()
                 .map(|bit| bit.clone())

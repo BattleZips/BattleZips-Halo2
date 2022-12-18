@@ -3,10 +3,14 @@ use {
         bitify::bitify::{BitifyConfig, Bits2NumChip, Num2BitsChip},
         placement::{
             chip::{PlacementChip, PlacementConfig},
-            primitives::PlacementBits,
+            primitives::AssignedBits,
         },
         transpose::chip::{TransposeChip, TransposeConfig},
-        utils::board::{Board, Deck, BOARD_SIZE},
+        utils::{
+            binary::BinaryValue,
+            board::{Board, Deck, BOARD_SIZE},
+            ship::{get_ship_length, get_ship_name}
+        },
     },
     halo2_gadgets::poseidon::{
         primitives::{ConstantLength, Spec},
@@ -25,7 +29,7 @@ use {
 };
 
 pub type Commitments<F> = [AssignedCell<F, F>; 10];
-pub type Placements<F> = [PlacementBits<F>; 10];
+pub type Placements<F> = [AssignedBits<F>; 10];
 
 /**
  * Return a label for commitments in debugging
@@ -106,13 +110,13 @@ pub trait BoardInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
     /**
      * Load the 10 ship placement commitments
      *
-     * @param board - board object storing state + marshalling state into witness format
-     * @return - tuple of references to ship commitments ([0..10]), board commitment ([10])
+     * @param ship_commitments - array of 10 BinaryValues - H and V commitments for each ship
+     * @return - array of 10 AssignedCells storing ship commitments in chip
      */
     fn load_commitments(
         &self,
         layouter: &mut impl Layouter<F>,
-        board: Board,
+        ship_commitments: [BinaryValue; 10],
     ) -> Result<Commitments<F>, Error>;
 
     /**
@@ -124,49 +128,49 @@ pub trait BoardInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
     fn decompose_commitments(
         &self,
         layouter: &mut impl Layouter<F>,
-        board: Board,
-        commitment: &Commitments<F>,
+        ship_commitments: [BinaryValue; 10],
+        commitment: [AssignedCell<F, F>; 10],
     ) -> Result<Placements<F>, Error>;
 
     /**
      * Load decomposed bits into placement chips
      *
-     * @param ships - deck of ship placements
+     * @param ships - the chosen BinaryValue ship_commitment for a H, V pair to use
      * @param placements - references to all assigned cells for num2bits decompositions
      * @return - Ok if placements were valid, and Errors otherwise
      */
     fn synth_placements(
         &self,
         layouter: &mut impl Layouter<F>,
-        ships: Deck,
+        ships: [BinaryValue; 5],
         placements: Placements<F>,
     ) -> Result<(), Error>;
 
     /**
      * Transpose ship placement bit decompositions into a single board and recompose into a single commitment
      *
-     * @param board - board object storing state commitments transpose into
+     * @param board - binary value encoded with board state (all transposed ships)
      * @param placements - reference to assigned cells of num2bits decomposed ship commitments
      * @return - reference to transposed binary decomposition representing board commitment
      */
     fn transpose_placements(
         &self,
         layouter: &mut impl Layouter<F>,
-        board: Board,
+        board: BinaryValue,
         placements: Placements<F>,
-    ) -> Result<PlacementBits<F>, Error>;
+    ) -> Result<AssignedBits<F>, Error>;
 
     /**
      * Recompose the bits from the board transposition instruciton into a single element
      *
-     * @param board - the board object storing the bits/ composed element
+     * @param board -  binary value encoded with board state (all transposed ships)
      * @param transposed - reference to assigned cells storing bits that represent serialized board state
      * @return - if successful, return the binary composition in little endian order of the transposed bits
      */
     fn recompose_board(
         &self,
         layouter: &mut impl Layouter<F>,
-        board: Board,
+        board: BinaryValue,
         transposed: [AssignedCell<F, F>; BOARD_SIZE],
     ) -> Result<AssignedCell<F, F>, Error>;
 
@@ -321,15 +325,33 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardChip<S, F> {
     /**
      * Synthesize a proof of a valid board
      *
-     * @param board - board object storing state + witness/ trace utility functions
+     * @param ship_commitments - 10x private ship commitments indicating a horizontal or vertical placement
+     * @param orientation - 5x boolean selectors for horizontal [0] or vertical [1] in each commitment pair
+     * @param board - board state as a BinaryValue
      */
-    pub fn synthesize(&self, mut layouter: impl Layouter<F>, board: Board) -> Result<(), Error> {
+    pub fn synthesize(
+        &self,
+        mut layouter: impl Layouter<F>,
+        ship_commitments: [BinaryValue; 10],
+        orientation: [bool; 5],
+        board: BinaryValue
+    ) -> Result<(), Error> {
+        // commitments: [F; 10]
+        let ships: [BinaryValue; 5] = orientation
+            .iter()
+            .enumerate()
+            .map(|(i, z)| ship_commitments[i * 2 + *z as usize])
+            .collect::<Vec<BinaryValue>>()
+            .try_into()
+            .unwrap();
+
         // load ship commitments into advice
-        let commitments = self.load_commitments(&mut layouter, board)?;
+        let assigned_commitments = self.load_commitments(&mut layouter, ship_commitments)?;
         // decompose commitments into 100 bits each
-        let placements = self.decompose_commitments(&mut layouter, board, &commitments)?;
+        let placements =
+            self.decompose_commitments(&mut layouter, ship_commitments, assigned_commitments)?;
         // run individual ship placement rule checks
-        self.synth_placements(&mut layouter, board.ships, placements.clone())?;
+        self.synth_placements(&mut layouter, ships, placements.clone())?;
         // check that ships can all be placed together to form a valid board
         let transposed_bits =
             self.transpose_placements(&mut layouter, board, placements.clone())?;
@@ -348,13 +370,12 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardInstructions<S, F> for BoardChip<S, F> 
     fn load_commitments(
         &self,
         layouter: &mut impl Layouter<F>,
-        board: Board,
+        ship_commitments: [BinaryValue; 10],
     ) -> Result<Commitments<F>, Error> {
         let assigned: [AssignedCell<F, F>; 10] = layouter.assign_region(
             || "load ship placements",
             |mut region: Region<F>| {
                 // assign ship commitments
-                let ship_commitments = board.witness_field();
                 let mut cells = Vec::<AssignedCell<F, F>>::new();
                 for i in 0..10 {
                     let label = commitment_label(i);
@@ -362,7 +383,7 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardInstructions<S, F> for BoardChip<S, F> 
                         || format!("{} ship commitment", label),
                         self.config.advice[i],
                         0,
-                        || Value::known(ship_commitments[i]),
+                        || Value::known(F::from_u128(ship_commitments[i].lower_u128())),
                     )?);
                 }
                 _ = self.config.selectors[0].enable(&mut region, 0);
@@ -375,19 +396,19 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardInstructions<S, F> for BoardChip<S, F> 
     fn decompose_commitments(
         &self,
         layouter: &mut impl Layouter<F>,
-        board: Board,
-        commitments: &Commitments<F>,
+        ship_commitments: [BinaryValue; 10],
+        assigned_commitments: [AssignedCell<F, F>; 10],
     ) -> Result<Placements<F>, Error> {
-        let bits = board.witness_decompose();
-        let mut placements = Vec::<PlacementBits<F>>::new();
+        let mut placements = Vec::<AssignedBits<F>>::new();
         for i in 0..10 {
-            let num2bits = Num2BitsChip::<F, BOARD_SIZE>::new(commitments[i].clone(), bits[i]);
+            let bits = ship_commitments[i].bitfield::<F, BOARD_SIZE>();
+            let num2bits = Num2BitsChip::<F, BOARD_SIZE>::new(assigned_commitments[i].clone(), bits);
             let label = commitment_label(i);
             let assigned_bits = num2bits.synthesize(
                 self.config.num2bits[i],
                 layouter.namespace(|| format!("{} num2bits", label)),
             )?;
-            placements.push(PlacementBits::<F>::from(assigned_bits));
+            placements.push(AssignedBits::<F>::from(assigned_bits));
         }
         Ok(placements.try_into().unwrap())
     }
@@ -395,51 +416,51 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardInstructions<S, F> for BoardChip<S, F> 
     fn synth_placements(
         &self,
         layouter: &mut impl Layouter<F>,
-        ships: Deck,
+        ships: [BinaryValue; 5],
         placements: Placements<F>,
     ) -> Result<(), Error> {
-        // PlacementChip::<F, 5>::new(self.config.placement.carrier).synthesize(
-        //     layouter,
-        //     ships.carrier.unwrap(),
-        //     placements[0].clone(),
-        //     placements[1].clone(),
-        // )?;
+        PlacementChip::<F, 5>::new(self.config.placement.carrier).synthesize(
+            layouter,
+            ships[0],
+            placements[0].clone(),
+            placements[1].clone(),
+        )?;
         PlacementChip::<F, 4>::new(self.config.placement.battleship).synthesize(
             layouter,
-            ships.battleship.unwrap(),
+            ships[1],
             placements[2].clone(),
             placements[3].clone(),
         )?;
-        // PlacementChip::<F, 3>::new(self.config.placement.cruiser).synthesize(
-        //     layouter,
-        //     ships.cruiser.unwrap(),
-        //     placements[4].clone(),
-        //     placements[5].clone(),
-        // )?;
-        // PlacementChip::<F, 3>::new(self.config.placement.submarine).synthesize(
-        //     layouter,
-        //     ships.submarine.unwrap(),
-        //     placements[6].clone(),
-        //     placements[7].clone(),
-        // )?;
-        // PlacementChip::<F, 2>::new(self.config.placement.destroyer).synthesize(
-        //     layouter,
-        //     ships.destroyer.unwrap(),
-        //     placements[8].clone(),
-        //     placements[9].clone(),
-        // )?;
+        PlacementChip::<F, 3>::new(self.config.placement.cruiser).synthesize(
+            layouter,
+            ships[2],
+            placements[4].clone(),
+            placements[5].clone(),
+        )?;
+        PlacementChip::<F, 3>::new(self.config.placement.submarine).synthesize(
+            layouter,
+            ships[3],
+            placements[6].clone(),
+            placements[7].clone(),
+        )?;
+        PlacementChip::<F, 2>::new(self.config.placement.destroyer).synthesize(
+            layouter,
+            ships[4],
+            placements[8].clone(),
+            placements[9].clone(),
+        )?;
         Ok(())
     }
 
     fn transpose_placements(
         &self,
         layouter: &mut impl Layouter<F>,
-        board: Board,
+        board: BinaryValue,
         placements: Placements<F>,
-    ) -> Result<PlacementBits<F>, Error> {
+    ) -> Result<AssignedBits<F>, Error> {
         let chip = TransposeChip::<F>::new(self.config.transpose);
-        let bits = board.state.bitfield::<F, BOARD_SIZE>();
-        let commitment = F::from_u128(board.state.lower_u128());
+        let bits = board.bitfield::<F, BOARD_SIZE>();
+        let commitment = F::from_u128(board.lower_u128());
         Ok(chip
             .synthesize(layouter, commitment, bits, placements)
             .unwrap())
@@ -448,11 +469,11 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardInstructions<S, F> for BoardChip<S, F> 
     fn recompose_board(
         &self,
         layouter: &mut impl Layouter<F>,
-        board: Board,
+        board: BinaryValue,
         transposed: [AssignedCell<F, F>; BOARD_SIZE],
     ) -> Result<AssignedCell<F, F>, Error> {
         Ok(
-            Bits2NumChip::<F, BOARD_SIZE>::new(F::from_u128(board.state.lower_u128()), transposed)
+            Bits2NumChip::<F, BOARD_SIZE>::new(F::from_u128(board.lower_u128()), transposed)
                 .synthesize(
                     self.config.bits2num,
                     layouter.namespace(|| "transposed bits2num"),

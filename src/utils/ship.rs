@@ -13,6 +13,38 @@ pub enum ShipType {
     Destroyer,
 }
 
+/**
+ * Return the length of the ship given its tuple index for placement
+ *
+ * @return - ship length given order in placement
+ */
+pub const fn get_ship_length(size: usize) -> usize {
+    match size {
+        0 => 5, // carrier
+        1 => 4, // battleship
+        2 => 3, // cruiser
+        3 => 3, // submarine
+        4 => 2, // destroyer
+        _ => 0,
+    }
+}
+
+/**
+ * Return the name of the ship given its tuple index for placement
+ *
+ * @return - ship name given order in placement
+ */
+pub const fn get_ship_name(size: usize) -> &'static str {
+    match size {
+        0 => "Carrier",
+        1 => "Battleship",
+        2 => "Cruiser",
+        3 => "Submarine",
+        4 => "Destroyer",
+        _ => "NULL",
+    }
+}
+
 impl ShipType {
     /**
      * Return the length of the ship given its type
@@ -115,11 +147,11 @@ impl Ship {
         for i in 0..self.ship_type.length() {
             // compute coordinate point with index offset
             let x_i = if self.z { self.x } else { self.x + i as u8 };
-            let y_i = if self.z { self.y  + i as u8 } else { self.y };
+            let y_i = if self.z { self.y + i as u8 } else { self.y };
             // serialize coordinate point
             let x = if transpose && self.z { x_i * 10 } else { x_i };
             let y = if transpose && self.z { y_i } else { y_i * 10 };
-            // combine and store 
+            // combine and store
             coordinates.push((x + y) as usize);
         }
         coordinates
