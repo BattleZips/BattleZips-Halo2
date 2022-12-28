@@ -80,11 +80,13 @@ mod test {
     #[test]
     fn valid_hit_0() {
         // construct valid battleship board pattern 1
-        let board = Board::from(&Deck::from(
-            [3, 5, 0, 0, 6],
-            [3, 4, 1, 5, 1],
-            [true, false, false, true, false],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 3, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
+        ]));
         let shot = serialize::<1>([3], [5]);
         let hit = BinaryValue::from_u8(1);
         let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
@@ -103,11 +105,13 @@ mod test {
     #[test]
     fn valid_hit_1() {
         // construct valid battleship board pattern 2
-        let board = Board::from(&Deck::from(
-            [3, 9, 0, 0, 6],
-            [4, 6, 0, 6, 1],
-            [false, true, false, false, true],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 4, false)),
+            Some((9, 6, true)),
+            Some((0, 0, false)),
+            Some((0, 6, false)),
+            Some((6, 1, true)),
+        ]));
         let shot = serialize::<1>([9], [8]);
         let hit = BinaryValue::from_u8(1);
         let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
@@ -126,11 +130,13 @@ mod test {
     #[test]
     fn valid_miss_0() {
         // construct valid battleship board pattern 1
-        let board = Board::from(&Deck::from(
-            [3, 5, 0, 0, 6],
-            [3, 4, 1, 5, 1],
-            [true, false, false, true, false],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 3, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
+        ]));
         let shot = serialize::<1>([4], [3]);
         let hit = BinaryValue::from_u8(0);
         let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
@@ -149,11 +155,13 @@ mod test {
     #[test]
     fn valid_miss_1() {
         // construct battleship board pattern 2
-        let board = Board::from(&Deck::from(
-            [3, 9, 0, 0, 6],
-            [4, 6, 0, 6, 1],
-            [false, true, false, false, true],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 4, false)),
+            Some((9, 6, true)),
+            Some((0, 0, false)),
+            Some((0, 6, false)),
+            Some((6, 1, true)),
+        ]));
         // make a shot that misses this board configuration
         let shot = serialize::<1>([3], [3]);
         // assert the shot misses
@@ -176,11 +184,13 @@ mod test {
     #[test]
     fn invalid_non_boolean_hit_assertion() {
         // construct battleship board pattern 2
-        let board = Board::from(&Deck::from(
-            [3, 9, 0, 0, 6],
-            [4, 6, 0, 6, 1],
-            [false, true, false, false, true],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 4, false)),
+            Some((9, 6, true)),
+            Some((0, 0, false)),
+            Some((0, 6, false)),
+            Some((6, 1, true)),
+        ]));
         // make a shot that hits this board configuration
         let shot = serialize::<1>([9], [8]);
         // assert a non-boolean value for hit
@@ -239,11 +249,13 @@ mod test {
     #[test]
     fn invalid_assert_hit_when_miss() {
         // construct battleship board pattern 2
-        let board = Board::from(&Deck::from(
-            [3, 9, 0, 0, 6],
-            [4, 6, 0, 6, 1],
-            [false, true, false, false, true],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 4, false)),
+            Some((9, 6, true)),
+            Some((0, 0, false)),
+            Some((0, 6, false)),
+            Some((6, 1, true)),
+        ]));
         // make a shot that misses this board configuration
         let shot = serialize::<1>([8], [8]);
         // assert that this shot hits the board configuration
@@ -286,11 +298,13 @@ mod test {
     #[test]
     fn invalid_assert_miss_when_hit() {
         // construct battleship board pattern 1
-        let board = Board::from(&Deck::from(
-            [3, 5, 0, 0, 6],
-            [3, 4, 1, 5, 1],
-            [true, false, false, true, false],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 3, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
+        ]));
         // make a shot that misses this board configuration
         let shot = serialize::<1>([7], [1]);
         // assert that this shot hits the board configuration
@@ -333,11 +347,13 @@ mod test {
     #[test]
     fn invalid_no_shot() {
         // construct battleship board pattern 1
-        let board = Board::from(&Deck::from(
-            [3, 5, 0, 0, 6],
-            [3, 4, 1, 5, 1],
-            [true, false, false, true, false],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 3, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
+        ]));
         // make a shot that misses this board configuration
         let shot = BinaryValue::new(U256::from([0, 0, 0, 0]));
         // assert that this shot misses the board configuration
@@ -377,11 +393,13 @@ mod test {
     #[test]
     fn invalid_multi_shot() {
         // construct battleship board pattern 1
-        let board = Board::from(&Deck::from(
-            [3, 5, 0, 0, 6],
-            [3, 4, 1, 5, 1],
-            [true, false, false, true, false],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 3, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
+        ]));
         // make one shot that misses and one that hits in a single commitment
         let shot = serialize::<2>([3, 9], [3, 9]);
         // assert that this shot hits the board configuration
@@ -421,11 +439,13 @@ mod test {
     #[test]
     fn invalid_multi_hit() {
         // construct battleship board pattern 2
-        let board = Board::from(&Deck::from(
-            [3, 9, 0, 0, 6],
-            [4, 6, 0, 6, 1],
-            [false, true, false, false, true],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 4, false)),
+            Some((9, 6, true)),
+            Some((0, 0, false)),
+            Some((0, 6, false)),
+            Some((6, 1, true)),
+        ]));
         // make three shots that all hit
         let shot = serialize::<3>([0, 1, 2], [0, 0, 0]);
         // assert that this shot hits the board configuration
@@ -485,11 +505,13 @@ mod test {
     #[test]
     fn invalid_hash() {
         // construct battleship board pattern 2
-        let board = Board::from(&Deck::from(
-            [3, 9, 0, 0, 6],
-            [4, 6, 0, 6, 1],
-            [false, true, false, false, true],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 4, false)),
+            Some((9, 6, true)),
+            Some((0, 0, false)),
+            Some((0, 6, false)),
+            Some((6, 1, true)),
+        ]));
         // make a shot that hits the board configuration
         let shot = serialize::<1>([0], [0]);
         // assert that this shot hits the board configuration
@@ -529,11 +551,13 @@ mod test {
     #[test]
     fn invalid_public_board_commitment() {
         // construct battleship board pattern 1
-        let board = Board::from(&Deck::from(
-            [3, 5, 0, 0, 6],
-            [3, 4, 1, 5, 1],
-            [true, false, false, true, false],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 3, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
+        ]));
         // make a shot that misses the board configuration
         let shot = serialize::<1>([0], [0]);
         // assert that this shot misses the board configuration
@@ -573,11 +597,13 @@ mod test {
     #[test]
     fn invalid_public_shot_commitment() {
         // construct battleship board pattern 1
-        let board = Board::from(&Deck::from(
-            [3, 5, 0, 0, 6],
-            [3, 4, 1, 5, 1],
-            [true, false, false, true, false],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 3, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
+        ]));
         // make a shot that misses the board configuration
         let shot = serialize::<1>([0], [0]);
         // assert that this shot misses the board configuration
@@ -617,11 +643,13 @@ mod test {
     #[test]
     fn invalid_public_hit_assertion() {
         // construct battleship board pattern 1
-        let board = Board::from(&Deck::from(
-            [3, 9, 0, 0, 6],
-            [4, 6, 0, 6, 1],
-            [false, true, false, false, true],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 3, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
+        ]));
         // make a shot that hits the board configuration
         let shot = serialize::<1>([1], [6]);
         // assert that this shot hits the board configuration
@@ -643,6 +671,22 @@ mod test {
         assert_eq!(
             prover.verify(),
             Err(vec![
+                VerifyFailure::ConstraintNotSatisfied {
+                    constraint: (
+                        (7, "constrain shot running sum output").into(),
+                        1,
+                        "Public hit assertion matches private witness"
+                    )
+                        .into(),
+                    location: FailureLocation::InRegion {
+                        region: (4, "shot running sum output checks").into(),
+                        offset: 0
+                    },
+                    cell_values: vec![
+                        (((Any::Advice, 0).into(), 0).into(), String::from("1")),
+                        (((Any::Advice, 2).into(), 0).into(), String::from("0")),
+                    ]
+                },
                 VerifyFailure::Permutation {
                     column: (Any::Advice, 4).into(),
                     location: FailureLocation::InRegion {
@@ -661,11 +705,13 @@ mod test {
     #[test]
     fn print_circuit() {
         use plotters::prelude::*;
-        let board = Board::from(&Deck::from(
-            [3, 9, 0, 0, 6],
-            [4, 6, 0, 6, 1],
-            [false, true, false, false, true],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 4, false)),
+            Some((9, 6, true)),
+            Some((0, 0, false)),
+            Some((0, 6, false)),
+            Some((6, 1, true)),
+        ]));
         let shot = serialize::<1>([1], [6]);
         let hit = BinaryValue::from_u8(1);
         let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state, shot, hit);

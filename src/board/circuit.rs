@@ -76,11 +76,13 @@ mod test {
     #[test]
     fn valid_0() {
         // construct battleship board pattern #1
-        let board = Board::from(&Deck::from(
-            [3, 5, 0, 0, 6],
-            [3, 4, 1, 5, 1],
-            [true, false, false, true, false],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 5, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
+        ]));
         // take the poseidon hash of the board state as the public board commitment
         let board_commitment = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
             .hash([Fp::from_u128(board.state.lower_u128())]);
@@ -94,11 +96,13 @@ mod test {
     #[test]
     fn valid_1() {
         // construct battleship board pattern #2
-        let board = Board::from(&Deck::from(
-            [3, 9, 0, 0, 6],
-            [4, 6, 0, 6, 1],
-            [false, true, false, false, true],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 4, false)),
+            Some((9, 6, true)),
+            Some((0, 0, false)),
+            Some((0, 6, false)),
+            Some((6, 1, true)),
+        ]));
         // take the poseidon hash of the board state as the public board commitment
         let board_commitment = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
             .hash([Fp::from_u128(board.state.lower_u128())]);
@@ -112,11 +116,13 @@ mod test {
     #[test]
     fn invalid_placement_dual() {
         // construct battleship board pattern #2
-        let board = Board::from(&Deck::from(
-            [3, 9, 0, 0, 6],
-            [4, 6, 0, 6, 1],
-            [false, true, false, false, true],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 4, false)),
+            Some((9, 6, true)),
+            Some((0, 0, false)),
+            Some((0, 6, false)),
+            Some((6, 1, true)),
+        ]));
         // take the poseidon hash of the board state as the public board commitment
         let board_commitment = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
             .hash([Fp::from_u128(board.state.lower_u128())]);
@@ -127,86 +133,43 @@ mod test {
         // construct BoardValidity circuit
         let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(shot_commitments, board.state);
         let prover = MockProver::run(12, &circuit, vec![vec![board_commitment]]).unwrap();
-        // expect proof failure
-        assert_eq!(
-            prover.verify(),
-            Err(vec![
-                VerifyFailure::ConstraintNotSatisfied {
-                    // fail constraint: consequence of H + V not summing as expected in bits
-                    constraint: (
-                        (15, "running sum constraints").into(),
-                        0,
-                        "Placed ship of correct length"
-                    )
-                        .into(),
-                    location: FailureLocation::InRegion {
-                        region: (13, "constrain running sum output").into(),
-                        offset: 0
-                    },
-                    cell_values: vec![(((Any::Advice, 1).into(), 0).into(), String::from("0x6")),]
-                },
-                VerifyFailure::ConstraintNotSatisfied {
-                    // fail constraint: transpose expecting no bit but shows up from dual placement
-                    constraint: (
-                        (36, "transpose row constraint").into(),
-                        0,
-                        "Constrain trace value integrity"
-                    )
-                        .into(),
-                    location: FailureLocation::InRegion {
-                        region: (26, "Transpose ship commitments").into(),
-                        offset: 66
-                    },
-                    cell_values: vec![
-                        (((Any::Advice, 0).into(), 0).into(), String::from("0")),
-                        (((Any::Advice, 1).into(), 0).into(), String::from("1")),
-                        (((Any::Advice, 2).into(), 0).into(), String::from("0")),
-                        (((Any::Advice, 3).into(), 0).into(), String::from("0")),
-                        (((Any::Advice, 4).into(), 0).into(), String::from("0")),
-                        (((Any::Advice, 5).into(), 0).into(), String::from("0")),
-                        (((Any::Advice, 6).into(), 0).into(), String::from("0")),
-                        (((Any::Advice, 7).into(), 0).into(), String::from("0")),
-                        (((Any::Advice, 8).into(), 0).into(), String::from("0")),
-                        (((Any::Advice, 9).into(), 0).into(), String::from("0")),
-                        (((Any::Advice, 10).into(), 0).into(), String::from("0")),
-                    ]
-                },
-                VerifyFailure::ConstraintNotSatisfied {
-                    // Main constraint, other constraints are side effects
-                    // fail constraint: either horizontal or vertical placement is 0
-                    constraint: (
-                        (40, "Commitment orientation H OR V == 0 constraint").into(),
-                        0,
-                        "Aircraft Carrier H OR V == 0"
-                    )
-                        .into(),
-                    location: FailureLocation::InRegion {
-                        region: (0, "load ship placements").into(),
-                        offset: 0
-                    },
-                    cell_values: vec![
-                        (
-                            ((Any::Advice, 0).into(), 0).into(),
-                            String::from("0xf80000000000")
-                        ),
-                        (
-                            ((Any::Advice, 1).into(), 0).into(),
-                            String::from("0x40000000000000000")
-                        ),
-                    ]
-                },
-            ])
-        );
+        // expected failure constraint: either horizontal or vertical placement is 0
+        let expected = VerifyFailure::ConstraintNotSatisfied {
+            constraint: (
+                (40, "Commitment orientation H OR V == 0 constraint").into(),
+                0,
+                "Aircraft Carrier H OR V == 0",
+            )
+                .into(),
+            location: FailureLocation::InRegion {
+                region: (0, "load ship placements").into(),
+                offset: 0,
+            },
+            cell_values: vec![
+                (
+                    ((Any::Advice, 0).into(), 0).into(),
+                    String::from("0xf80000000000"),
+                ),
+                (
+                    ((Any::Advice, 1).into(), 0).into(),
+                    String::from("0x40000000000000000"),
+                ),
+            ],
+        };
+        // println!("xx: {:?}", prover.verify().unwrap_err());
+        assert!(prover.verify().unwrap_err().contains(&expected));
     }
 
     #[test]
     fn invalid_placement_none() {
-        // construct battleship board pattern #1
-        let board = Board::from(&Deck::from(
-            [3, 5, 0, 0, 6],
-            [3, 4, 1, 5, 1],
-            [true, false, false, true, false],
-        ));
+        // construct battleship board pattern #1 with Carrier missing
+        let board = Board::from(&Deck::from([
+            None,
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, true)),
+        ]));
         // take the poseidon hash of the board state as the public board commitment
         let board_commitment = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
             .hash([Fp::from_u128(board.state.lower_u128())]);
@@ -214,14 +177,38 @@ mod test {
         let mut shot_commitments = board.witness();
         shot_commitments[1] = BinaryValue::from_u8(0);
         // construct BoardValidity circuit
-        let circuit =
-            BoardCircuit::<P128Pow5T3, Fp>::new(shot_commitments, board.state);
+        let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(shot_commitments, board.state);
         let prover = MockProver::run(12, &circuit, vec![vec![board_commitment]]).unwrap();
         // expect proof failure
         assert_eq!(
             prover.verify(),
             Err(vec![
-                // VerifyFailure::ConstraintNotSatisfied {    }
+                VerifyFailure::ConstraintNotSatisfied {
+                    constraint: (
+                        (15, "running sum constraints").into(),
+                        0,
+                        "Placed ship of correct length",
+                    )
+                        .into(),
+                    location: FailureLocation::InRegion {
+                        region: (13, "constrain running sum output").into(),
+                        offset: 0,
+                    },
+                    cell_values: vec![(((Any::Advice, 1).into(), 0).into(), String::from("0"),),]
+                },
+                VerifyFailure::ConstraintNotSatisfied {
+                    constraint: (
+                        (15, "running sum constraints").into(),
+                        1,
+                        "One full bit window",
+                    )
+                        .into(),
+                    location: FailureLocation::InRegion {
+                        region: (13, "constrain running sum output").into(),
+                        offset: 0,
+                    },
+                    cell_values: vec![(((Any::Advice, 2).into(), 0).into(), String::from("0"),),]
+                }
             ])
         );
     }

@@ -1,9 +1,7 @@
 use {
-    crate::{
-        utils::{
-            binary::BinaryValue,
-            ship::{Ship, ShipType},
-        },
+    crate::utils::{
+        binary::BinaryValue,
+        ship::{Ship, ShipType},
     },
     bitvec::prelude::*,
     halo2_gadgets::poseidon::primitives::{ConstantLength, Hash, P128Pow5T3, Spec},
@@ -58,20 +56,28 @@ impl Deck {
     }
 
     /**
-     * Given a placement of 5 ships, construct a deck object
+     * Selectively place ships onto the board (instead of all 5)
      * @dev index corresponds to [carrier, battleship, cruiser, submarine, destroyer]
      *
-     * @param x - array of horizontal coordinates for ship heads
-     * @param y - array of vertical coordiantes for ship heads
-     * @param z - array of boolean values toggling vertical/ horizontal ship orientation
+     * @param ships - array of optional ship placements
      */
-    pub fn from(x: [u8; 5], y: [u8; 5], z: [bool; 5]) -> Self {
+    pub fn from(ships: [Option<(u8, u8, bool)>; 5]) -> Self {
         let mut deck = Deck::new();
-        deck.add(Ship::new(ShipType::Carrier, x[0], y[0], z[0]));
-        deck.add(Ship::new(ShipType::Battleship, x[1], y[1], z[1]));
-        deck.add(Ship::new(ShipType::Cruiser, x[2], y[2], z[2]));
-        deck.add(Ship::new(ShipType::Submarine, x[3], y[3], z[3]));
-        deck.add(Ship::new(ShipType::Destroyer, x[4], y[4], z[4]));
+        if let Some((x, y, z)) = ships[0] {
+            deck.add(Ship::new(ShipType::Carrier, x, y, z));
+        }
+        if let Some((x, y, z)) = ships[1] {
+            deck.add(Ship::new(ShipType::Battleship, x, y, z));
+        }
+        if let Some((x, y, z)) = ships[2] {
+            deck.add(Ship::new(ShipType::Cruiser, x, y, z));
+        }
+        if let Some((x, y, z)) = ships[3] {
+            deck.add(Ship::new(ShipType::Submarine, x, y, z));
+        }
+        if let Some((x, y, z)) = ships[4] {
+            deck.add(Ship::new(ShipType::Destroyer, x, y, z));
+        }
         deck
     }
 
@@ -139,22 +145,6 @@ impl IndexMut<ShipType> for Deck {
 pub struct Board {
     pub ships: Deck,
     pub state: BinaryValue,
-}
-
-pub enum BoardError {
-    Duplicate,
-    Collision,
-    Unplaced,
-}
-
-impl BoardError {
-    fn msg(self) -> String {
-        String::from(match self {
-            BoardError::Duplicate => "Ship type has already been placed!",
-            BoardError::Collision => "Ship collides with a previously placed ship!",
-            BoardError::Unplaced => "Ship type has not yet been placed!",
-        })
-    }
 }
 
 // Constructor utilities
@@ -287,12 +277,12 @@ impl Board {
      * @param ship - the type of ship to place
      * @return - Ok, or a string explaining why the placement failed
      */
-    pub fn place(&mut self, ship: Ship) -> Result<(), BoardError> {
+    pub fn place(&mut self, ship: Ship) -> Result<(), &'static str> {
         // let x = ship as u8;
         if self.ships[ship.ship_type].is_some() {
-            Err(BoardError::Duplicate)
+            Err("Ship type has already been placed!")
         } else if self.check_collisions(ship) {
-            Err(BoardError::Collision)
+            Err("Ship collides with a previously placed ship!")
         } else {
             // add ship to deck
             self.ships.add(ship);
@@ -304,41 +294,14 @@ impl Board {
             Ok(())
         }
     }
-
-    // /**
-    //  * Remove a placed ship from the board
-    //  *
-    //  * @param self - the board to remove a ship from
-    //  * @param ship - the type of ship to remove
-    //  */
-    // pub fn remove(&mut self, ship: Ship) -> Result<(), BoardError> {
-    //     if self.ships[ship.ship_type].is_none() {
-    //         Err(BoardError::Unplaced)
-    //     } else {
-    //         // remove ship from board
-    //         let coordiantes = self.ships[ship.ship_type].unwrap().coordinates();
-    //         for coordinate in coordiantes {
-    //             self.state.value.get_mut(coordinate).unwrap().set(false);
-    //         }
-    //         // remove ship from deck
-    //         self.ships.remove(ship.ship_type);
-    //         Ok(())
-    //     }
-    // }
 }
 
-// impl Board {
-//     /**
-//      * Return the poseidon hash of the board commitment on the pallas curve
-//      *
-//      * @return - the poseidon hash on Fp
-//      */
-//     pub fn hash(self) -> Fp {
-//         Hash::<Fp, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
-//             .hash([self.state.fp()])
-//     }
-// }
+// needed functionality for malicious inputs
+// make a ship commitment where ship length = Z = X + Y where bits are set in X + Y so they transpose as in order but are separate commitments
+// make a ship commitment where bits are not in order
+// make a ship commitmnet
 
+// impl
 #[cfg(test)]
 mod test {
 
@@ -357,11 +320,13 @@ mod test {
 
     #[test]
     fn test2() {
-        let board = Board::from(&Deck::from(
-            [3, 5, 0, 0, 6],
-            [3, 4, 1, 5, 1],
-            [true, false, false, true, false],
-        ));
+        let board = Board::from(&Deck::from([
+            Some((3, 3, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
+        ]));
         board.print();
         // get commitment bits
         let bits = [
