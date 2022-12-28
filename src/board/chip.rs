@@ -9,7 +9,7 @@ use {
         utils::{
             binary::BinaryValue,
             board::{Board, Deck, BOARD_SIZE},
-            ship::{get_ship_length, get_ship_name}
+            ship::{get_ship_length, get_ship_name},
         },
     },
     halo2_gadgets::poseidon::{
@@ -326,25 +326,20 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardChip<S, F> {
      * Synthesize a proof of a valid board
      *
      * @param ship_commitments - 10x private ship commitments indicating a horizontal or vertical placement
-     * @param orientation - 5x boolean selectors for horizontal [0] or vertical [1] in each commitment pair
      * @param board - board state as a BinaryValue
      */
     pub fn synthesize(
         &self,
         mut layouter: impl Layouter<F>,
         ship_commitments: [BinaryValue; 10],
-        orientation: [bool; 5],
-        board: BinaryValue
+        board: BinaryValue,
     ) -> Result<(), Error> {
-        // commitments: [F; 10]
-        let ships: [BinaryValue; 5] = orientation
-            .iter()
-            .enumerate()
-            .map(|(i, z)| ship_commitments[i * 2 + *z as usize])
-            .collect::<Vec<BinaryValue>>()
-            .try_into()
-            .unwrap();
-
+        // compute combined ship commitments
+        let mut ships = Vec::<BinaryValue>::new();
+        for i in 0..5 {
+            ships.push(ship_commitments[i * 2].zip(ship_commitments[i * 2 + 1]));
+        }
+        let ships: [BinaryValue; 5] = ships.try_into().unwrap();
         // load ship commitments into advice
         let assigned_commitments = self.load_commitments(&mut layouter, ship_commitments)?;
         // decompose commitments into 100 bits each
@@ -402,7 +397,8 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardInstructions<S, F> for BoardChip<S, F> 
         let mut placements = Vec::<AssignedBits<F>>::new();
         for i in 0..10 {
             let bits = ship_commitments[i].bitfield::<F, BOARD_SIZE>();
-            let num2bits = Num2BitsChip::<F, BOARD_SIZE>::new(assigned_commitments[i].clone(), bits);
+            let num2bits =
+                Num2BitsChip::<F, BOARD_SIZE>::new(assigned_commitments[i].clone(), bits);
             let label = commitment_label(i);
             let assigned_bits = num2bits.synthesize(
                 self.config.num2bits[i],
