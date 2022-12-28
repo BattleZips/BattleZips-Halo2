@@ -66,7 +66,8 @@ mod test {
         super::*,
         crate::utils::{
             binary::U256,
-            board::{Board, Deck},
+            board::Board,
+            deck::Deck,
             shot::serialize,
         },
         halo2_gadgets::poseidon::primitives::{ConstantLength, Hash as Poseidon, P128Pow5T3},

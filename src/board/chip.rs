@@ -8,8 +8,7 @@ use {
         transpose::chip::{TransposeChip, TransposeConfig},
         utils::{
             binary::BinaryValue,
-            board::{Board, Deck, BOARD_SIZE},
-            ship::{get_ship_length, get_ship_name},
+            board::{BOARD_SIZE},
         },
     },
     halo2_gadgets::poseidon::{
