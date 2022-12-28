@@ -81,7 +81,7 @@ mod test {
     fn valid_0() {
         // construct battleship board pattern #1
         let board = Board::from(&Deck::from([
-            Some((3, 5, true)),
+            Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
             Some((0, 5, true)),
@@ -125,49 +125,55 @@ mod test {
 
     #[test]
     fn invalid_placement_dual() {
-        // construct battleship board pattern #2
+        // construct battleship board pattern #1
         let board = Board::from(&Deck::from([
-            Some((3, 4, false)),
-            Some((9, 6, true)),
-            Some((0, 0, false)),
-            Some((0, 6, false)),
-            Some((6, 1, true)),
+            Some((3, 3, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         // take the poseidon hash of the board state as the public board commitment
         let board_commitment = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
             .hash([Fp::from_u128(board.state.lower_u128())]);
         // modify the shot_commitment for H5, V5 by setting horizontal as expected and vertical = 1 (not allowed)
-        let mut shot_commitments = board.witness(DEFAULT_WITNESS_OPTIONS);
-        // define a commitment that will not intersect with other ships and cause further constrains
-        shot_commitments[1] = serialize::<1>([6], [6]);
+        let witness_options = [
+            WitnessOption::DualPlacement,
+            WitnessOption::Default,
+            WitnessOption::Default,
+            WitnessOption::Default,
+            WitnessOption::Default,
+        ];
+        let shot_commitments = board.witness(witness_options);
         // construct BoardValidity circuit
         let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(shot_commitments, board.state);
         let prover = MockProver::run(12, &circuit, vec![vec![board_commitment]]).unwrap();
         // expected failure constraint: either horizontal or vertical placement is 0
-        let expected = VerifyFailure::ConstraintNotSatisfied {
-            constraint: (
-                (40, "Commitment orientation H OR V == 0 constraint").into(),
-                0,
-                "Aircraft Carrier H OR V == 0",
-            )
-                .into(),
-            location: FailureLocation::InRegion {
-                region: (0, "load ship placements").into(),
-                offset: 0,
-            },
-            cell_values: vec![
-                (
-                    ((Any::Advice, 0).into(), 0).into(),
-                    String::from("0xf80000000000"),
-                ),
-                (
-                    ((Any::Advice, 1).into(), 0).into(),
-                    String::from("0x40000000000000000"),
-                ),
-            ],
-        };
-        println!("xx: {:?}", prover.verify().unwrap_err());
-        // assert!(prover.verify().unwrap_err().contains(&expected));
+        assert_eq!(
+            prover.verify(),
+            Err(vec![VerifyFailure::ConstraintNotSatisfied {
+                constraint: (
+                    (40, "Commitment orientation H OR V == 0 constraint").into(),
+                    0,
+                    "Aircraft Carrier H OR V == 0",
+                )
+                    .into(),
+                location: FailureLocation::InRegion {
+                    region: (0, "load ship placements").into(),
+                    offset: 0,
+                },
+                cell_values: vec![
+                    (
+                        ((Any::Advice, 0).into(), 0).into(),
+                        String::from("0x200000000"),
+                    ),
+                    (
+                        ((Any::Advice, 1).into(), 0).into(),
+                        String::from("0x3c00000000"),
+                    )
+                ]
+            },])
+        );
     }
 
     #[test]

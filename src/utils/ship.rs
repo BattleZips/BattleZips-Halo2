@@ -227,7 +227,7 @@ impl Ship {
         // move first bit from assigned placement commitment to empty placement commitment such that
         // (example h: empty)    ... 0 0 0 0 0 0 0 0 ... => ... 0 0 1 0 0 0 0 0 ...
         // (example v: assigned) ... 0 0 1 1 1 1 0 0 ... => ... 0 0 0 1 1 1 0 0 ...
-        let (from, to) = if self.z { (0, 1) } else { (1, 0) };
+        let (from, to) = if self.z { (1, 0) } else { (0, 1) };
         placement[to].value.get_mut(index).unwrap().set(true);
         placement[from].value.get_mut(index).unwrap().set(false);
         placement
