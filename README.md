@@ -1,8 +1,9 @@
 # BattleZips V2
 BattleZips Halo 2 implementation
 
-TODO: FIX WITHOUT_WITNESS BY USING VALUE::UNKNOWN
-
+TODO: 
+  - FIX WITHOUT_WITNESS BY USING VALUE::UNKNOWN
+  - Replace Poseidon Hash with Pedersen Commitment
 
 ## Circuits
 
