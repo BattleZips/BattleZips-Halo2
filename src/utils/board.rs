@@ -1,3 +1,5 @@
+use crate::utils::binary::U256;
+
 use {
     crate::utils::{
         binary::BinaryValue,
@@ -13,7 +15,6 @@ pub const BOARD_SIZE: usize = 100;
 #[derive(Clone, Copy, Debug)]
 pub struct Board {
     pub ships: Deck,
-    pub state: BinaryValue,
 }
 
 // Definition of a deck of ships placed on a board rationally
@@ -25,10 +26,7 @@ impl Board {
      * @return - Board where commitment = 0 and all ships are unassigned in deck
      */
     pub fn new() -> Self {
-        Board {
-            ships: Deck::new(),
-            state: BinaryValue::empty(),
-        }
+        Board { ships: Deck::new() }
     }
 
     /**
@@ -59,22 +57,45 @@ impl Board {
      * @return - Ok, or a string explaining why the placement failed
      */
     pub fn place(&mut self, ship: Ship) -> Result<(), &'static str> {
-        // let x = ship as u8;
         if self.ships[ship.ship_type].is_some() {
             Err("Ship type has already been placed!")
         } else {
             // add ship to deck
             self.ships.add(ship);
-            // place ship on board
-            let coordinates = ship.coordinates(false);
-            for coordinate in coordinates {
-                self.state.value.get_mut(coordinate).unwrap().set(true);
-            }
             Ok(())
         }
     }
 
     // STATE ACCESS UTILITIES //
+
+    /**
+     * Compute the private board state as needed for default or test cases
+     *
+     * @param utilities - Witness utility options for testing malicious cases
+     * @return - transposed board state element computed according to witness options
+     */
+    pub fn state(&self, utilities: [WitnessOption; 5]) -> BinaryValue {
+        let mut state = U256::ZERO;
+        let ships = self.ships.iterator();
+        for i in 0..ships.len() {
+            if ships[i].is_some() {
+                let ship = ships[i].unwrap();
+                let placement = ship.witness(utilities[i]);
+                for j in 0..BOARD_SIZE {
+                    // transpoe horizontal
+                    if placement[0].value[j] {
+                        state.get_mut(j).unwrap().set(true);
+                    };
+                    // transpose horizontal
+                    let v_index = j % 10 * 10 + j / 10;
+                    if placement[1].value[j] {
+                        state.get_mut(v_index).unwrap().set(true);
+                    };
+                }
+            }
+        }
+        BinaryValue::new(state)
+    }
 
     /**
      * Format the shot commitments as needed for the private witness inputs for a Board proof
@@ -107,7 +128,11 @@ impl Board {
             if i % 10 == 0 {
                 let mut out = format!("{} |", i / 10);
                 for j in 0..10 {
-                    out = format!("{} {}", out, self.state.value[i + j] as u8);
+                    out = format!(
+                        "{} {}",
+                        out,
+                        self.state(DEFAULT_WITNESS_OPTIONS).value[i + j] as u8
+                    );
                 }
                 lines.push(out);
             }
