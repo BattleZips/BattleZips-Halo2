@@ -455,9 +455,8 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardInstructions<S, F> for BoardChip<S, F> 
     ) -> Result<AssignedBits<F>, Error> {
         let chip = TransposeChip::<F>::new(self.config.transpose);
         let bits = board.bitfield::<F, BOARD_SIZE>();
-        let commitment = F::from_u128(board.lower_u128());
         Ok(chip
-            .synthesize(layouter, commitment, bits, placements)
+            .synthesize(layouter, bits, placements)
             .unwrap())
     }
 

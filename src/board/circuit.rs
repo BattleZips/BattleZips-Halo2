@@ -82,8 +82,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         // take the poseidon hash of the board state as the public board commitment
         let board_commitment =
@@ -132,8 +132,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         // modify the shot_commitment for H5, V5 by setting horizontal as expected and vertical = 1 (not allowed)
         let witness_options = [
@@ -248,8 +248,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         // modify the shot_commitment for H5, V5 by setting horizontal as expected and vertical = 1 (not allowed)
         let witness_options = [
@@ -293,8 +293,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         // modify the shot_commitment for H5, V5 by setting horizontal as expected and vertical = 1 (not allowed)
         let witness_options = [
@@ -338,8 +338,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         // modify the shot_commitment for H4 by adding an extra bit making ship length 5 when it should be 4
         let witness_options = [
@@ -507,8 +507,8 @@ mod test {
             Some((3, 6, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         // take the poseidon hash of the board state as the public board commitment
         let board_commitment =
@@ -541,6 +541,179 @@ mod test {
     }
 
     #[test]
+    fn invalid_collision_no_transpose() {
+        // @notice: no transpose means there is a horizontal collision found without any transposition
+        // construct battleship board pattern #1 with modification
+        // set crusier ship to be placed horizontally at (4, 1) which collides with destroyer ship at (6, 1)
+        let board = Board::from(&Deck::from([
+            Some((3, 3, true)),
+            Some((5, 4, false)),
+            Some((4, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
+        ]));
+        // take the poseidon hash of the board state as the public board commitment
+        let board_commitment =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
+        // construct BoardValidity circuit
+        let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(
+            board.witness(DEFAULT_WITNESS_OPTIONS),
+            board.state(DEFAULT_WITNESS_OPTIONS),
+        );
+        // expected failure constraint: more than 2 bits found in a transpose row, sum of all commitment bits in row != transposed commitment bit
+        let prover = MockProver::run(12, &circuit, vec![vec![board_commitment]]).unwrap();
+        assert_eq!(
+            prover.verify(),
+            Err(vec![
+                // sum of all bits in commitment row != transposed commitment bit
+                //      this is constrained to be binary, so it is impossible to not be 0 or 1
+                //      or else bits2num throws constraint error instead
+                //      fails when expects sum = 2 but gets sum = 1
+                VerifyFailure::ConstraintNotSatisfied {
+                    constraint: (
+                        (36, "transpose row constraint").into(),
+                        0,
+                        "Constrain trace value integrity",
+                    )
+                        .into(),
+                    location: FailureLocation::InRegion {
+                        region: (26, "Transpose ship commitments").into(),
+                        offset: 16,
+                    },
+                    cell_values: vec![
+                        (((Any::Advice, 0).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 1).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 2).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 3).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 4).into(), 0).into(), String::from("1"),),
+                        (((Any::Advice, 5).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 6).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 7).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 8).into(), 0).into(), String::from("1"),),
+                        (((Any::Advice, 9).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 10).into(), 0).into(), String::from("1"),)
+                    ]
+                },
+                // fail constraint: sum of all bits in commitment row != 0 or 1
+                VerifyFailure::ConstraintNotSatisfied {
+                    constraint: (
+                        (36, "transpose row constraint").into(),
+                        1,
+                        "Constrain transposition of bit",
+                    )
+                        .into(),
+                    location: FailureLocation::InRegion {
+                        region: (26, "Transpose ship commitments").into(),
+                        offset: 16,
+                    },
+                    cell_values: vec![
+                        (((Any::Advice, 0).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 1).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 2).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 3).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 4).into(), 0).into(), String::from("1"),),
+                        (((Any::Advice, 5).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 6).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 7).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 8).into(), 0).into(), String::from("1"),),
+                        (((Any::Advice, 9).into(), 0).into(), String::from("0"),),
+                    ]
+                }
+            ])
+        );
+    }
+
+    #[test]
+    fn invalid_collision_transposed() {
+        // @notice: transposed means the placement commitment would be valid if
+        //          vertical but collides when transposed as horizontal
+        // construct battleship board pattern #2 with modification
+        // set destroyer ship to be placed vertically at (6, 3) which collides with battleship ship at (6, 4)
+        //          if destroyer placed horizontally, would produce a valid board configuration
+        // construct battleship board pattern #2
+        let board = Board::from(&Deck::from([
+            Some((3, 4, false)),
+            Some((9, 6, true)),
+            Some((0, 0, false)),
+            Some((0, 6, false)),
+            Some((6, 3, true)),
+        ]));
+        // take the poseidon hash of the board state as the public board commitment
+        let board_commitment =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
+        // construct BoardValidity circuit
+        let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(
+            board.witness(DEFAULT_WITNESS_OPTIONS),
+            board.state(DEFAULT_WITNESS_OPTIONS),
+        );
+        // expected failure constraint: more than 2 bits found in a transpose row, sum of all commitment bits in row != transposed commitment bit
+        let prover = MockProver::run(12, &circuit, vec![vec![board_commitment]]).unwrap();
+        assert_eq!(
+            prover.verify(),
+            Err(vec![
+                // sum of all bits in commitment row != transposed commitment bit
+                //      this is constrained to be binary, so it is impossible to not be 0 or 1
+                //      or else bits2num throws constraint error instead
+                //      fails when expects sum = 2 but gets sum = 1
+                VerifyFailure::ConstraintNotSatisfied {
+                    constraint: (
+                        (36, "transpose row constraint").into(),
+                        0,
+                        "Constrain trace value integrity",
+                    )
+                        .into(),
+                    location: FailureLocation::InRegion {
+                        region: (26, "Transpose ship commitments").into(),
+                        offset: 46,
+                    },
+                    cell_values: vec![
+                        (((Any::Advice, 0).into(), 0).into(), String::from("1"),),
+                        (((Any::Advice, 1).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 2).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 3).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 4).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 5).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 6).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 7).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 8).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 9).into(), 0).into(), String::from("1"),),
+                        (((Any::Advice, 10).into(), 0).into(), String::from("1"),)
+                    ]
+                },
+                // fail constraint: sum of all bits in commitment row != 0 or 1
+                VerifyFailure::ConstraintNotSatisfied {
+                    constraint: (
+                        (36, "transpose row constraint").into(),
+                        1,
+                        "Constrain transposition of bit",
+                    )
+                        .into(),
+                    location: FailureLocation::InRegion {
+                        region: (26, "Transpose ship commitments").into(),
+                        offset: 46,
+                    },
+                    cell_values: vec![
+                        (((Any::Advice, 0).into(), 0).into(), String::from("1"),),
+                        (((Any::Advice, 1).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 2).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 3).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 4).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 5).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 6).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 7).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 8).into(), 0).into(), String::from("0"),),
+                        (((Any::Advice, 9).into(), 0).into(), String::from("1"),),
+                    ]
+                }
+            ])
+        );
+    }
+
+    #[test]
     fn print_circuit() {
         use plotters::prelude::*;
         // construct battleship board pattern #1
@@ -548,8 +721,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         // take the poseidon hash of the board state as the public board commitment
         // construct BoardValidity circuit

@@ -82,8 +82,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         let shot = serialize::<1>([3], [5]);
         let hit = BinaryValue::from_u8(1);
@@ -138,8 +138,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         let shot = serialize::<1>([4], [3]);
         let hit = BinaryValue::from_u8(0);
@@ -318,11 +318,11 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         // make a shot that misses this board configuration
-        let shot = serialize::<1>([6], [2]);
+        let shot = serialize::<1>([7], [1]);
         // assert that this shot hits the board configuration
         let hit = BinaryValue::from_u8(0);
         // get the Poseidon hash of the board state
@@ -370,8 +370,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         // make a shot that misses this board configuration
         let shot = BinaryValue::new(U256::from([0, 0, 0, 0]));
@@ -419,8 +419,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         // make one shot that misses and one that hits in a single commitment
         let shot = serialize::<2>([3, 9], [3, 9]);
@@ -585,8 +585,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         // make a shot that misses the board configuration
         let shot = serialize::<1>([0], [0]);
@@ -634,8 +634,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         // make a shot that misses the board configuration
         let shot = serialize::<1>([0], [0]);
@@ -683,8 +683,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, false)),
-            Some((6, 1, true)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
         ]));
         // make a shot that hits the board configuration
         let shot = serialize::<1>([1], [6]);
