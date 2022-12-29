@@ -714,6 +714,84 @@ mod test {
     }
 
     #[test]
+    fn invalid_board_commitment_advice() {
+        // prove the circuit will throw an error if the board commitment advice is not equal to the computed commitment
+        // construct battleship board pattern #2
+        let board = Board::from(&Deck::from([
+            Some((3, 4, false)),
+            Some((9, 6, true)),
+            Some((0, 0, false)),
+            Some((0, 6, false)),
+            Some((6, 1, true)),
+        ]));
+        // take the poseidon hash of the board state as the public board commitment, and add one to it to make it invalid
+        let board_commitment =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]) + Fp::one();
+        // construct BoardValidity circuit
+        let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(
+            board.witness(DEFAULT_WITNESS_OPTIONS),
+            board.state(DEFAULT_WITNESS_OPTIONS),
+        );
+        let prover = MockProver::run(12, &circuit, vec![vec![board_commitment]]).unwrap();
+        // expect a permutation failure when the computed board hash does not match the advice given to the circuit
+        assert_eq!(prover.verify(), Err(vec![
+            VerifyFailure::Permutation {
+                column: (Any::Advice, 0).into(),
+                location: FailureLocation::InRegion {
+                    region: (30, "permute state").into(),
+                    offset: 36
+                }
+            },
+            VerifyFailure::Permutation {
+                column: (Any::Instance, 0).into(),
+                location: FailureLocation::OutsideRegion { row: 0 }
+            }
+        ]));
+    }
+
+    #[test]
+    fn invalid_board_commitment_instance() {
+        // prove the circuit will throw an error if a correct board commitment is given as advice,
+        //      but a different commitment was given for the public instance output
+        // construct battleship board pattern #1
+        let board = Board::from(&Deck::from([
+            Some((3, 3, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
+        ]));
+        // take the poseidon hash of the board state as the public board commitment
+        let board_commitment =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
+        // construct BoardValidity circuit
+        let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(
+            board.witness(DEFAULT_WITNESS_OPTIONS),
+            board.state(DEFAULT_WITNESS_OPTIONS),
+        );
+        // add one to the public board commitment to make it invalid
+        let prover = MockProver::run(12, &circuit, vec![vec![board_commitment + Fp::one()]]).unwrap();
+        // expect a permutation failure when the computed board hash does not match the advice given to the circuit
+        assert_eq!(prover.verify(), Err(vec![
+            VerifyFailure::Permutation {
+                column: (Any::Advice, 0).into(),
+                location: FailureLocation::InRegion {
+                    region: (30, "permute state").into(),
+                    offset: 36
+                }
+            },
+            VerifyFailure::Permutation {
+                column: (Any::Instance, 0).into(),
+                location: FailureLocation::OutsideRegion { row: 0 }
+            }
+        ]));
+    }
+    
+    #[test]
     fn print_circuit() {
         use plotters::prelude::*;
         // construct battleship board pattern #1
