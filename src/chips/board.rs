@@ -1,15 +1,11 @@
 use {
     crate::{
-        bitify::bitify::{BitifyConfig, Bits2NumChip, Num2BitsChip},
-        placement::{
-            chip::{PlacementChip, PlacementConfig},
-            primitives::AssignedBits,
+        chips::{
+            bitify::{BitifyConfig, Bits2NumChip, Num2BitsChip},
+            placement::{PlacementChip, PlacementConfig, AssignedBits},
+            transpose::{TransposeChip, TransposeConfig},
         },
-        transpose::chip::{TransposeChip, TransposeConfig},
-        utils::{
-            binary::BinaryValue,
-            board::{BOARD_SIZE},
-        },
+        utils::{binary::BinaryValue, board::BOARD_SIZE},
     },
     halo2_gadgets::poseidon::{
         primitives::{ConstantLength, Spec},
@@ -455,9 +451,7 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardInstructions<S, F> for BoardChip<S, F> 
     ) -> Result<AssignedBits<F>, Error> {
         let chip = TransposeChip::<F>::new(self.config.transpose);
         let bits = board.bitfield::<F, BOARD_SIZE>();
-        Ok(chip
-            .synthesize(layouter, bits, placements)
-            .unwrap())
+        Ok(chip.synthesize(layouter, bits, placements).unwrap())
     }
 
     fn recompose_board(

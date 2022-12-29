@@ -2,7 +2,7 @@ use halo2_gadgets::poseidon::primitives::ConstantLength;
 
 use {
     crate::{
-        bitify::bitify::{BitifyConfig, Num2BitsChip},
+        chips::bitify::{BitifyConfig, Num2BitsChip},
         utils::{binary::BinaryValue, board::BOARD_SIZE},
     },
     halo2_gadgets::poseidon::{

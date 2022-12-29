@@ -1,11 +1,18 @@
 # BattleZips V2
-BattleZips Halo 2 implementation
+As we seek to apply Zero Knowledge cryptography, a generalization of our goal is to build cryptographically-secured "confidential, adversarial multi-party computations". In laymans terms, it means we need a computational vehicle that allows parties to truthfully coordinate with eachother without revealing critical operating parameters that a counterparty could abuse. [Battleships](https://www.hasbro.com/common/instruct/battleship.pdf) is an adversarial, two-player board game centered around a hidden information mechanic. BattleZipsV2 demonstrates how one constrains computations for a Battleship game with the intent that developers can extrapolate their own projects in the [zcash/Halo2](https://github.com/zcash/halo2) proving scheme. 
 
-TODO: 
-  - FIX WITHOUT_WITNESS BY USING VALUE::UNKNOWN
-  - Replace Poseidon Hash with Pedersen Commitment
+Once Halo2 supports IVC recursion, this codebase will be revisited to prototype ZK State Channels with the battleship game in Halo2. This improvement will add a "Game" proof that recursively takes in Alice Board proof -> Bob Board proof -> Alice shot proof 0 -> Bob shot proof 0 -> ... Alice shot proof N; where the proof will signal a winner if 17 hits have been accumulated. This is a tool of both privacy and scalability:
+ * in BattleZipsV2, each shot + the hit / miss assertions (as well as all intermediate metadata) is available publicly. State channels will provide a proof that it is a summary of "An off-chain battleship game was won by alice and lost by bob" without revealing any other information about the game
+ * in BattleZipsV2, both board proofs as well as every shot proof is delivered and verified on-chain in a different transaction (on-chain integration not included for Halo2 currently). With ZK state channels, players pass proofs back and forth directly over a p2p connection, using a recursive game proof to locally check messages from the counterparty and accumulate state. Once a player has accumulated 17 hits on the opponent, they will be able to post the recursive proof on-chain in a single transaction, drastically reducing the on-chain footprint
+
+## License
+BattleZipsV2 is license under GNU GPLv3. Go nuts.
+
+## Contact Project Maintainer
+Did you find a bug in our code? Does something about BattleZipsV2 (or Halo2 in general) not make sense to you, and you'd like some guidance? Did you raise an issue that has been pending for a week? We @ BattleZips are Discord natives; join the [BattleZips Discord channel](https://discord.gg/NEyTSmjewn) to get quick help / direction!
 
 ## Circuits
+We aim to bring a complete walkthrough of the codebase in mid Q1 2023; contact the project maintainer for questions otherwise!
 
 ### Board Circuit
   - Inputs array of 10 private ship commitments corresponding to [`H5`, `V5`, `H4`, `V4`, `H3a`, `V3a`, `H3b`, `V3b`, `H2`, `V2`]
@@ -32,56 +39,16 @@ TODO:
     - in the future this will be one step later as the hash will be signed
   - Publicly export `board_commitment`, `shot_commitment`, `hit_assertion` from the zero knowledge proof
 
-## Chips
-TODO
-Note: does not include `BoardChip` and `ShotChip`, only auxiliary chips used by the main circuits
+## To Do
+### ASAP
+ - integration/ benchmark real proof generation
+ - docs check
+ - print circuits and official write up
 
-### Bitify
-
-### Placement
-
-### Transpose
-
-## Todo
- - EdDSA Signature Verification of `board_commitment` for shot and board
- - final file structure refactor
- - chip unit testing (test most functionality @ component chip level)
- - production / real proof generation (basic)
- - unit test full game
- - full docs check
-
-
-## tests
-
-### board
- - [x] 2x random board valid board proofs
- - [x] try to place both a horizontal and vertical commitment
- - [x] try to place neither a horizontal nor vertial commitment (not place a ship)
- - [x] try to use a ship commitment with non-consecutive bits
- - [x] try to add an extra non-consecutive bit to a ship commitment
- - [x] try to use an oversized ship commitment (extra bit added consecutively)
- - [x] try to use an undersized ship commitment
- - [x] try to place a ship that is technically consecutive but exceeds board row/col length of 10 (ex: 59, 60, 61)
- - [x] try to place a ship that collides with another ship (without transpose)
- - [x] try to place a ship that collides with another ship (with transpose)
- - [ ] try to provide wrong public board commitment
-
-### shot
- - [x] 2x hit = true valid shot proofs
- - [x] 2x hit = false valid shot proofs
- - [x] try assert hit != 0 or 1
- - [x] try to assert a hit when the shot missed
- - [x] try to assert a shot when the hit missed
- - [x] try to make a shot commitment of 0 (no shot)
- - [x] try to make a shot commitment where multiple bits are flipped (multiple shots in one turn)
- - [x] try to make a shot commitment where there are multiple hits (extension of multiple shots)
- - [x] try to provide wrong public board commitment
- - [x] try to provide wrong public hit assertion
- - [x] try to provide wrong public shot commitment
-
-### integration test
- - alice board placement
- - bob board placement
- - alice makes 17 hits
- - bob makes 16 misses
- - does not use mock prover, uses real proofs
+## Todo future
+ - investigate lookup tables for interpolated placement bit window count exp
+ - further refactors for code quality/ hygeine
+ - pedersen commitments instead of poseidon hashes
+ - verify board/ shot proofs on-chain
+ - wasm integration with BattleZips front-end
+ - maybe: video walkthrough

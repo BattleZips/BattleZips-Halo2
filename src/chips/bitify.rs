@@ -26,7 +26,6 @@ pub struct BitifyConfig {
 }
 
 // given an assigned numerical value, compute a constrained bit decomposition
-#[derive(Clone)]
 pub struct Num2BitsChip<F: FieldExt, const B: usize> {
     /// Assigns a cell for the value.
     value: AssignedCell<F, F>,
@@ -35,7 +34,6 @@ pub struct Num2BitsChip<F: FieldExt, const B: usize> {
 }
 
 // given an assignment of bits, constrain to be binary and compose into an element
-#[derive(Clone)]
 pub struct Bits2NumChip<F: FieldExt, const B: usize> {
     /// Assigns a cell for the value.
     value: Value<F>,
@@ -241,7 +239,7 @@ mod test {
         crate::utils::{binary::BinaryValue, board::BOARD_SIZE, ship::*},
         halo2_proofs::{
             circuit::SimpleFloorPlanner,
-            dev::{metadata, CircuitLayout, FailureLocation, MockProver, VerifyFailure},
+            dev::{metadata, FailureLocation, MockProver, VerifyFailure},
             pasta::{group::ff::PrimeFieldBits, Fp},
             plonk::{Any, Circuit},
         },
@@ -530,30 +528,30 @@ mod test {
         )
     }
 
-    #[test]
-    fn print_layout() {
-        use plotters::prelude::*;
-        let value = Fp::zero();
-        let circuit =
-            Num2BitsCircuit::<DEFAULT_BITS>::new(value, BinaryValue::new(value.to_le_bits()));
-        let root =
-            BitMapBackend::new("src/bitify/bitify_layout.png", (1024, 768)).into_drawing_area();
-        root.fill(&WHITE).unwrap();
-        let root = root
-            .titled("Bits2Num/ Num2Bits Circuit Layout", ("sans-serif", 60))
-            .unwrap();
+    // #[test]
+    // fn print_layout() {
+    //     use plotters::prelude::*;
+    //     let value = Fp::zero();
+    //     let circuit =
+    //         Num2BitsCircuit::<DEFAULT_BITS>::new(value, BinaryValue::new(value.to_le_bits()));
+    //     let root =
+    //         BitMapBackend::new("src/bitify/bitify_layout.png", (1024, 768)).into_drawing_area();
+    //     root.fill(&WHITE).unwrap();
+    //     let root = root
+    //         .titled("Bits2Num/ Num2Bits Circuit Layout", ("sans-serif", 60))
+    //         .unwrap();
 
-        CircuitLayout::default()
-            // You can optionally render only a section of the circuit.
-            .view_width(0..2)
-            .view_height(0..16)
-            // You can hide labels, which can be useful with smaller areas.
-            .show_labels(false)
-            // Render the circuit onto your area!
-            // The first argument is the size parameter for the circuit.
-            .render(9, &circuit, &root)
-            .unwrap();
-    }
+    //     CircuitLayout::default()
+    //         // You can optionally render only a section of the circuit.
+    //         .view_width(0..2)
+    //         .view_height(0..16)
+    //         // You can hide labels, which can be useful with smaller areas.
+    //         .show_labels(false)
+    //         // Render the circuit onto your area!
+    //         // The first argument is the size parameter for the circuit.
+    //         .render(9, &circuit, &root)
+    //         .unwrap();
+    // }
 
     // // #[test]
     // // fn test_num_to_bits_production() {
