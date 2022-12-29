@@ -82,8 +82,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, true)),
-            Some((6, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
         ]));
         let shot = serialize::<1>([3], [5]);
         let hit = BinaryValue::from_u8(1);
@@ -97,7 +97,8 @@ mod test {
             Fp::from_u128(hit.lower_u128()),
         ];
         // construct BoardValidity circuit
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_inputs]);
         assert_eq!(prover.unwrap().verify(), Ok(()));
     }
@@ -114,15 +115,18 @@ mod test {
         ]));
         let shot = serialize::<1>([9], [8]);
         let hit = BinaryValue::from_u8(1);
-        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
-            .hash([Fp::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128())]);
+        let hashed =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
         let public_inputs = vec![
             hashed,
             Fp::from_u128(shot.lower_u128()),
             Fp::from_u128(hit.lower_u128()),
         ];
         // construct BoardValidity circuit
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_inputs]);
         assert_eq!(prover.unwrap().verify(), Ok(()));
     }
@@ -134,20 +138,23 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, true)),
-            Some((6, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
         ]));
         let shot = serialize::<1>([4], [3]);
         let hit = BinaryValue::from_u8(0);
-        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
-            .hash([Fp::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128())]);
+        let hashed =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
         let public_inputs = vec![
             hashed,
             Fp::from_u128(shot.lower_u128()),
             Fp::from_u128(hit.lower_u128()),
         ];
         // construct BoardValidity circuit
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_inputs]);
         assert_eq!(prover.unwrap().verify(), Ok(()));
     }
@@ -167,8 +174,10 @@ mod test {
         // assert the shot misses
         let hit = BinaryValue::from_u8(0);
         // get the Poseidon hash of the board state
-        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
-            .hash([Fp::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128())]);
+        let hashed =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
         // specify the public exports from the proof
         let public_exports = vec![
             hashed,
@@ -176,7 +185,8 @@ mod test {
             Fp::from_u128(hit.lower_u128()),
         ];
         // mock prove ShotCircuit
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_exports]);
         assert_eq!(prover.unwrap().verify(), Ok(()));
     }
@@ -196,8 +206,10 @@ mod test {
         // assert a non-boolean value for hit
         let hit = BinaryValue::from_u8(2);
         // get the Poseidon hash of the board state
-        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
-            .hash([Fp::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128())]);
+        let hashed =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
         // specify the public exports from the proof
         let public_exports = vec![
             hashed,
@@ -205,7 +217,8 @@ mod test {
             Fp::from_u128(hit.lower_u128()),
         ];
         // mock prove ShotCircuit
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
         // expect failure
         assert_eq!(
@@ -261,8 +274,10 @@ mod test {
         // assert that this shot hits the board configuration
         let hit = BinaryValue::from_u8(1);
         // get the Poseidon hash of the board state
-        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
-            .hash([Fp::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128())]);
+        let hashed =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
         // specify the public exports from the proof
         let public_exports = vec![
             hashed,
@@ -270,7 +285,8 @@ mod test {
             Fp::from_u128(hit.lower_u128()),
         ];
         // mock prove ShotCircuit
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
         // expect failure
         assert_eq!(
@@ -302,16 +318,18 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, true)),
-            Some((6, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
         ]));
         // make a shot that misses this board configuration
-        let shot = serialize::<1>([7], [1]);
+        let shot = serialize::<1>([6], [2]);
         // assert that this shot hits the board configuration
         let hit = BinaryValue::from_u8(0);
         // get the Poseidon hash of the board state
-        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
-            .hash([Fp::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128())]);
+        let hashed =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
         // specify the public exports from the proof
         let public_exports = vec![
             hashed,
@@ -319,7 +337,8 @@ mod test {
             Fp::from_u128(hit.lower_u128()),
         ];
         // mock prove ShotCircuit
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
         // expect failure
         assert_eq!(
@@ -351,16 +370,18 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, true)),
-            Some((6, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
         ]));
         // make a shot that misses this board configuration
         let shot = BinaryValue::new(U256::from([0, 0, 0, 0]));
         // assert that this shot misses the board configuration
         let hit = BinaryValue::from_u8(0);
         // get the Poseidon hash of the board state
-        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
-            .hash([Fp::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128())]);
+        let hashed =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
         // specify the public exports from the proof
         let public_exports = vec![
             hashed,
@@ -368,7 +389,8 @@ mod test {
             Fp::from_u128(hit.lower_u128()),
         ];
         // mock prove ShotCircuit
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
         // expect failure
         assert_eq!(
@@ -397,16 +419,18 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, true)),
-            Some((6, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
         ]));
         // make one shot that misses and one that hits in a single commitment
         let shot = serialize::<2>([3, 9], [3, 9]);
         // assert that this shot hits the board configuration
         let hit = BinaryValue::from_u8(1);
         // get the Poseidon hash of the board state
-        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
-            .hash([Fp::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128())]);
+        let hashed =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
         // specify the public exports from the proof
         let public_exports = vec![
             hashed,
@@ -414,7 +438,8 @@ mod test {
             Fp::from_u128(hit.lower_u128()),
         ];
         // mock prove ShotCircuit
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
         // expect failure
         assert_eq!(
@@ -452,8 +477,10 @@ mod test {
         // @dev could either constrain this way which will count wrong # of hits, or nonzero hit assertion
         let hit = BinaryValue::from_u8(1);
         // get the Poseidon hash of the board state
-        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
-            .hash([Fp::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128())]);
+        let hashed =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
         // specify the public exports from the proof
         let public_exports = vec![
             hashed,
@@ -461,7 +488,8 @@ mod test {
             Fp::from_u128(hit.lower_u128()),
         ];
         // mock prove ShotCircuit
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
         // expect failure
         assert_eq!(
@@ -517,9 +545,10 @@ mod test {
         // assert that this shot hits the board configuration
         let hit = BinaryValue::from_u8(1);
         // get the Poseidon hash of the board state AND ADD ONE to make it incorrect
-        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
-            .hash([Fp::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128())])
-            + Fp::one();
+        let hashed =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]) + Fp::one();
         // specify the public exports from the proof
         let public_exports = vec![
             hashed,
@@ -527,7 +556,8 @@ mod test {
             Fp::from_u128(hit.lower_u128()),
         ];
         // mock prove ShotCircuit
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
         // expect failure
         assert_eq!(
@@ -555,16 +585,18 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, true)),
-            Some((6, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
         ]));
         // make a shot that misses the board configuration
         let shot = serialize::<1>([0], [0]);
         // assert that this shot misses the board configuration
         let hit = BinaryValue::from_u8(0);
         // get the Poseidon hash of the board state
-        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
-            .hash([Fp::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128())]);
+        let hashed =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
         // specify the public exports from the proof
         // add one to public_exports[0] to throw off publicly asserted board commitment
         let public_exports = vec![
@@ -573,7 +605,8 @@ mod test {
             Fp::from_u128(hit.lower_u128()),
         ];
         // mock prove ShotCircuit
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
         // expect failure
         assert_eq!(
@@ -601,16 +634,18 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, true)),
-            Some((6, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
         ]));
         // make a shot that misses the board configuration
         let shot = serialize::<1>([0], [0]);
         // assert that this shot misses the board configuration
         let hit = BinaryValue::from_u8(0);
         // get the Poseidon hash of the board state
-        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
-            .hash([Fp::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128())]);
+        let hashed =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
         // specify the public exports from the proof
         // add one to public_exports[1] to throw off publicly asserted shot commitment
         let public_exports = vec![
@@ -619,7 +654,8 @@ mod test {
             Fp::from_u128(hit.lower_u128()),
         ];
         // mock prove ShotCircuit
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
         // expect failure
         assert_eq!(
@@ -647,16 +683,18 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, true)),
-            Some((6, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
         ]));
         // make a shot that hits the board configuration
         let shot = serialize::<1>([1], [6]);
         // assert that this shot hits the board configuration
         let hit = BinaryValue::from_u8(1);
         // get the Poseidon hash of the board state
-        let hashed = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
-            .hash([Fp::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128())]);
+        let hashed =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
         // specify the public exports from the proof
         // add one to public_exports[2] to throw off public hit assertion
         let public_exports = vec![
@@ -665,7 +703,8 @@ mod test {
             Fp::from_u128(hit.lower_u128()) + Fp::one(),
         ];
         // mock prove ShotCircuit
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let prover = MockProver::run(9, &circuit, vec![public_exports]).unwrap();
         // expect failure
         assert_eq!(
@@ -714,7 +753,8 @@ mod test {
         ]));
         let shot = serialize::<1>([1], [6]);
         let hit = BinaryValue::from_u8(1);
-        let circuit = ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
         let root = BitMapBackend::new("src/shot/shot_layout.png", (1920, 1080)).into_drawing_area();
         root.fill(&WHITE).unwrap();
         let root = root

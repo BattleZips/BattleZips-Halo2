@@ -82,8 +82,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, true)),
-            Some((6, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
         ]));
         // take the poseidon hash of the board state as the public board commitment
         let board_commitment =
@@ -132,8 +132,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, true)),
-            Some((6, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
         ]));
         // modify the shot_commitment for H5, V5 by setting horizontal as expected and vertical = 1 (not allowed)
         let witness_options = [
@@ -248,8 +248,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, true)),
-            Some((6, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
         ]));
         // modify the shot_commitment for H5, V5 by setting horizontal as expected and vertical = 1 (not allowed)
         let witness_options = [
@@ -261,19 +261,16 @@ mod test {
         ];
         let shot_commitments = board.witness(witness_options);
         // take the poseidon hash of the board state as the public board commitment
-        let board_commitment =
-            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
-                board.state(witness_options).lower_u128(),
-            )]);
+        let board_commitment = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
+            .hash([Fp::from_u128(board.state(witness_options).lower_u128())]);
         // construct BoardValidity circuit
-        let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(
-            shot_commitments,
-            board.state(witness_options),
-        );
+        let circuit =
+            BoardCircuit::<P128Pow5T3, Fp>::new(shot_commitments, board.state(witness_options));
         let prover = MockProver::run(12, &circuit, vec![vec![board_commitment]]).unwrap();
         // expected failure constraint: cannot find a full ship placement bit window
-        assert_eq!(prover.verify(), Err(vec![
-            VerifyFailure::ConstraintNotSatisfied {
+        assert_eq!(
+            prover.verify(),
+            Err(vec![VerifyFailure::ConstraintNotSatisfied {
                 constraint: (
                     (15, "running sum constraints").into(),
                     1,
@@ -285,8 +282,8 @@ mod test {
                     offset: 0,
                 },
                 cell_values: vec![(((Any::Advice, 2).into(), 0).into(), String::from("0"),),]
-            }
-        ]));
+            }])
+        );
     }
 
     #[test]
@@ -296,8 +293,8 @@ mod test {
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, true)),
-            Some((6, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
         ]));
         // modify the shot_commitment for H5, V5 by setting horizontal as expected and vertical = 1 (not allowed)
         let witness_options = [
@@ -309,19 +306,16 @@ mod test {
         ];
         let shot_commitments = board.witness(witness_options);
         // take the poseidon hash of the board state as the public board commitment
-        let board_commitment =
-            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
-                board.state(witness_options).lower_u128(),
-            )]);
+        let board_commitment = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
+            .hash([Fp::from_u128(board.state(witness_options).lower_u128())]);
         // construct BoardValidity circuit
-        let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(
-            shot_commitments,
-            board.state(witness_options),
-        );
+        let circuit =
+            BoardCircuit::<P128Pow5T3, Fp>::new(shot_commitments, board.state(witness_options));
         let prover = MockProver::run(12, &circuit, vec![vec![board_commitment]]).unwrap();
         // expected failure constraint: either horizontal or vertical placement is 0
-        assert_eq!(prover.verify(), Err(vec![
-            VerifyFailure::ConstraintNotSatisfied {
+        assert_eq!(
+            prover.verify(),
+            Err(vec![VerifyFailure::ConstraintNotSatisfied {
                 constraint: (
                     (15, "running sum constraints").into(),
                     0,
@@ -333,20 +327,229 @@ mod test {
                     offset: 0,
                 },
                 cell_values: vec![(((Any::Advice, 1).into(), 0).into(), String::from("0x6"),),]
-            }
+            }])
+        );
+    }
+
+    #[test]
+    fn invalid_placement_oversized() {
+        // construct battleship board pattern #1
+        let board = Board::from(&Deck::from([
+            Some((3, 3, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
         ]));
+        // modify the shot_commitment for H4 by adding an extra bit making ship length 5 when it should be 4
+        let witness_options = [
+            WitnessOption::Default,
+            WitnessOption::Oversized,
+            WitnessOption::Default,
+            WitnessOption::Default,
+            WitnessOption::Default,
+        ];
+        let shot_commitments = board.witness(witness_options);
+        // take the poseidon hash of the board state as the public board commitment
+        let board_commitment = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
+            .hash([Fp::from_u128(board.state(witness_options).lower_u128())]);
+        // construct BoardValidity circuit
+        let circuit =
+            BoardCircuit::<P128Pow5T3, Fp>::new(shot_commitments, board.state(witness_options));
+        let prover = MockProver::run(12, &circuit, vec![vec![board_commitment]]).unwrap();
+        // expected failure constraint: too many bits; too many full bit windows
+        assert_eq!(
+            prover.verify(),
+            Err(vec![
+                // counted 5 bits for battleship placement chip expecting 4 bits
+                VerifyFailure::ConstraintNotSatisfied {
+                    constraint: (
+                        (20, "running sum constraints").into(),
+                        0,
+                        "Placed ship of correct length",
+                    )
+                        .into(),
+                    location: FailureLocation::InRegion {
+                        region: (16, "constrain running sum output").into(),
+                        offset: 0,
+                    },
+                    cell_values: vec![(((Any::Advice, 1).into(), 0).into(), String::from("0x5"),),]
+                },
+                // counted 2 full bit windows for battleship placement chip expecting 1 full bit window
+                // full window at 54, 64, 74, 84 expected, full window at 64, 74, 84, 94 not expected
+                VerifyFailure::ConstraintNotSatisfied {
+                    constraint: (
+                        (20, "running sum constraints").into(),
+                        1,
+                        "One full bit window",
+                    )
+                        .into(),
+                    location: FailureLocation::InRegion {
+                        region: (16, "constrain running sum output").into(),
+                        offset: 0,
+                    },
+                    cell_values: vec![(((Any::Advice, 2).into(), 0).into(), String::from("0x2"),),]
+                }
+            ])
+        );
+    }
+
+    #[test]
+    fn invalid_placement_undersized() {
+        // construct battleship board pattern #2
+        let board = Board::from(&Deck::from([
+            Some((3, 4, false)),
+            Some((9, 6, true)),
+            Some((0, 0, false)),
+            Some((0, 6, false)),
+            Some((6, 1, true)),
+        ]));
+        // modify the shot_commitment for V5 by removing last bit making ship length 1 when it should be 2
+        let witness_options = [
+            WitnessOption::Default,
+            WitnessOption::Default,
+            WitnessOption::Default,
+            WitnessOption::Default,
+            WitnessOption::Undersized,
+        ];
+        let shot_commitments = board.witness(witness_options);
+        // take the poseidon hash of the board state as the public board commitment
+        let board_commitment = Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init()
+            .hash([Fp::from_u128(board.state(witness_options).lower_u128())]);
+        // construct BoardValidity circuit
+        let circuit =
+            BoardCircuit::<P128Pow5T3, Fp>::new(shot_commitments, board.state(witness_options));
+        let prover = MockProver::run(12, &circuit, vec![vec![board_commitment]]).unwrap();
+        // expected failure constraint: too many bits; too many full bit windows
+        assert_eq!(
+            prover.verify(),
+            Err(vec![
+                // counted 1 bits for destroyer placement, expecting 2
+                VerifyFailure::ConstraintNotSatisfied {
+                    constraint: (
+                        (35, "running sum constraints").into(),
+                        0,
+                        "Placed ship of correct length",
+                    )
+                        .into(),
+                    location: FailureLocation::InRegion {
+                        region: (25, "constrain running sum output").into(),
+                        offset: 0,
+                    },
+                    cell_values: vec![(((Any::Advice, 1).into(), 0).into(), String::from("1"),),]
+                },
+                // counted 0 full bit windows, expecting 1
+                VerifyFailure::ConstraintNotSatisfied {
+                    constraint: (
+                        (35, "running sum constraints").into(),
+                        1,
+                        "One full bit window",
+                    )
+                        .into(),
+                    location: FailureLocation::InRegion {
+                        region: (25, "constrain running sum output").into(),
+                        offset: 0,
+                    },
+                    cell_values: vec![(((Any::Advice, 2).into(), 0).into(), String::from("0"),),]
+                }
+            ])
+        );
+    }
+
+    #[test]
+    fn invalid_horizontal_row_overflow() {
+        // construct battleship board pattern #2 with modification
+        // set cruiser ship to be placed at (9, 0) which is out of bounds by 2 bits
+        // 9 valid, wraps around to 10, 11
+        let board = Board::from(&Deck::from([
+            Some((3, 4, false)),
+            Some((9, 6, true)),
+            Some((9, 0, false)),
+            Some((0, 6, false)),
+            Some((6, 1, true)),
+        ]));
+        // take the poseidon hash of the board state as the public board commitment
+        let board_commitment =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
+        // construct BoardValidity circuit
+        let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(
+            board.witness(DEFAULT_WITNESS_OPTIONS),
+            board.state(DEFAULT_WITNESS_OPTIONS),
+        );
+        let prover = MockProver::run(12, &circuit, vec![vec![board_commitment]]).unwrap();
+        // expected failure constraint: no full bit window found since consecutive bits are not in the same row
+        assert_eq!(
+            prover.verify(),
+            Err(vec![VerifyFailure::ConstraintNotSatisfied {
+                constraint: (
+                    (25, "running sum constraints").into(),
+                    1,
+                    "One full bit window",
+                )
+                    .into(),
+                location: FailureLocation::InRegion {
+                    region: (19, "constrain running sum output").into(),
+                    offset: 0,
+                },
+                cell_values: vec![(((Any::Advice, 2).into(), 0).into(), String::from("0"),),]
+            }])
+        );
+    }
+
+    #[test]
+    fn invalid_vertical_row_overflow() {
+        // construct battleship board pattern #1 with modification
+        // set carrier ship to be placed vertically at (3, 6) which is out of bounds by 1 bit
+        // 63, 73, 83, 93 valid; wraps around to 4
+        let board = Board::from(&Deck::from([
+            Some((3, 6, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
+        ]));
+        // take the poseidon hash of the board state as the public board commitment
+        let board_commitment =
+            Poseidon::<_, P128Pow5T3, ConstantLength<1>, 3, 2>::init().hash([Fp::from_u128(
+                board.state(DEFAULT_WITNESS_OPTIONS).lower_u128(),
+            )]);
+        // construct BoardValidity circuit
+        let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(
+            board.witness(DEFAULT_WITNESS_OPTIONS),
+            board.state(DEFAULT_WITNESS_OPTIONS),
+        );
+        let prover = MockProver::run(12, &circuit, vec![vec![board_commitment]]).unwrap();
+        // expected failure constraint: no full bit window found since consecutive bits are not in the same row
+        assert_eq!(
+            prover.verify(),
+            Err(vec![VerifyFailure::ConstraintNotSatisfied {
+                constraint: (
+                    (15, "running sum constraints").into(),
+                    1,
+                    "One full bit window",
+                )
+                    .into(),
+                location: FailureLocation::InRegion {
+                    region: (13, "constrain running sum output").into(),
+                    offset: 0,
+                },
+                cell_values: vec![(((Any::Advice, 2).into(), 0).into(), String::from("0"),),]
+            }])
+        );
     }
 
     #[test]
     fn print_circuit() {
         use plotters::prelude::*;
-       // construct battleship board pattern #1
+        // construct battleship board pattern #1
         let board = Board::from(&Deck::from([
             Some((3, 3, true)),
             Some((5, 4, false)),
             Some((0, 1, false)),
-            Some((0, 5, true)),
-            Some((6, 1, false)),
+            Some((0, 5, false)),
+            Some((6, 1, true)),
         ]));
         // take the poseidon hash of the board state as the public board commitment
         // construct BoardValidity circuit

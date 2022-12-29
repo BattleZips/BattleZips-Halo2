@@ -59,9 +59,9 @@ Note: does not include `BoardChip` and `ShotChip`, only auxiliary chips used by 
  - [x] try to place neither a horizontal nor vertial commitment (not place a ship)
  - [x] try to use a ship commitment with non-consecutive bits
  - [x] try to add an extra non-consecutive bit to a ship commitment
- - [ ] try to use an oversized ship commitment (extra bit added consecutively)
- - [ ] try to use an undersized ship commitment
- - [ ] try to place a ship that is technically consecutive but exceeds board row/col length of 10 (ex: 59, 60, 61)
+ - [x] try to use an oversized ship commitment (extra bit added consecutively)
+ - [x] try to use an undersized ship commitment
+ - [x] try to place a ship that is technically consecutive but exceeds board row/col length of 10 (ex: 59, 60, 61)
  - [ ] try to place a ship that collides with another ship (without transpose)
  - [ ] try to place a ship that collides with another ship (with transpose)
  - [ ] try to provide wrong public board commitment
