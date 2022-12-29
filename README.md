@@ -1,10 +1,6 @@
 # BattleZips V2
 As we seek to apply Zero Knowledge cryptography, a generalization of our goal is to build cryptographically-secured "confidential, adversarial multi-party computations". In laymans terms, it means we need a computational vehicle that allows parties to truthfully coordinate with eachother without revealing critical operating parameters that a counterparty could abuse. [Battleships](https://www.hasbro.com/common/instruct/battleship.pdf) is an adversarial, two-player board game centered around a hidden information mechanic. BattleZipsV2 demonstrates how one constrains computations for a Battleship game with the intent that developers can extrapolate their own projects in the [zcash/Halo2](https://github.com/zcash/halo2) proving scheme. 
 
-Once Halo2 supports IVC recursion, this codebase will be revisited to prototype ZK State Channels with the battleship game in Halo2. This improvement will add a "Game" proof that recursively takes in Alice Board proof -> Bob Board proof -> Alice shot proof 0 -> Bob shot proof 0 -> ... Alice shot proof N; where the proof will signal a winner if 17 hits have been accumulated. This is a tool of both privacy and scalability:
- * in BattleZipsV2, each shot + the hit / miss assertions (as well as all intermediate metadata) is available publicly. State channels will provide a proof that it is a summary of "An off-chain battleship game was won by alice and lost by bob" without revealing any other information about the game
- * in BattleZipsV2, both board proofs as well as every shot proof is delivered and verified on-chain in a different transaction (on-chain integration not included for Halo2 currently). With ZK state channels, players pass proofs back and forth directly over a p2p connection, using a recursive game proof to locally check messages from the counterparty and accumulate state. Once a player has accumulated 17 hits on the opponent, they will be able to post the recursive proof on-chain in a single transaction, drastically reducing the on-chain footprint
-
 ## License
 BattleZipsV2 is license under GNU GPLv3. Go nuts.
 
@@ -52,3 +48,8 @@ We aim to bring a complete walkthrough of the codebase in mid Q1 2023; contact t
  - verify board/ shot proofs on-chain
  - wasm integration with BattleZips front-end
  - maybe: video walkthrough
+
+## On ZK State Channels
+Once Halo2 supports IVC recursion, this codebase will be revisited to prototype ZK State Channels with the battleship game in Halo2. This improvement will add a "Game" proof that recursively takes in Alice Board proof -> Bob Board proof -> Alice shot proof 0 -> Bob shot proof 0 -> ... Alice shot proof N; where the proof will signal a winner if 17 hits have been accumulated. This is a tool of both privacy and scalability:
+ * in BattleZipsV2, each shot + the hit / miss assertions (as well as all intermediate metadata) is available publicly. State channels will provide a proof that it is a summary of "An off-chain battleship game was won by alice and lost by bob" without revealing any other information about the game
+ * in BattleZipsV2, both board proofs as well as every shot proof is delivered and verified on-chain in a different transaction (on-chain integration not included for Halo2 currently). With ZK state channels, players pass proofs back and forth directly over a p2p connection, using a recursive game proof to locally check messages from the counterparty and accumulate state. Once a player has accumulated 17 hits on the opponent, they will be able to post the recursive proof on-chain in a single transaction, drastically reducing the on-chain footprint
