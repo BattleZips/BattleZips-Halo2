@@ -13,6 +13,8 @@ proptest = "1.0.0"
 rand_core = "0.6.3"
 bitvec = "1.0.0"
 hex = "0.4.3"
+criterion = "0.4.0"
+rand = "0.8.5"
 
 [features]
 dev-graph = [
@@ -21,3 +23,13 @@ dev-graph = [
     "plotters/bitmap_backend",
     "plotters/bitmap_encoder",
 ]
+
+# [[bench]]
+# name = "shot"
+# path = "benches/shot.rs"
+# harness = false
+
+# [[bench]]
+# name = "board"
+# path = "benches/board.rs"
+# harness = false

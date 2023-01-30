@@ -13,7 +13,7 @@ use {
 };
 
 #[derive(Debug, Clone, Copy)]
-struct BoardCircuit<S: Spec<F, 3, 2>, F: FieldExt> {
+pub struct BoardCircuit<S: Spec<F, 3, 2>, F: FieldExt> {
     pub ship_commitments: [BinaryValue; 10],
     pub board: BinaryValue,
     _field: PhantomData<F>,
@@ -69,7 +69,7 @@ mod test {
         },
         halo2_gadgets::poseidon::primitives::{ConstantLength, Hash as Poseidon, P128Pow5T3},
         halo2_proofs::{
-            dev::{FailureLocation, MockProver, VerifyFailure},
+            dev::{FailureLocation, MockProver, VerifyFailure, CircuitLayout},
             pasta::Fp,
             plonk::Any,
         },
@@ -798,39 +798,38 @@ mod test {
         );
     }
 
-    // #[test]
-    // fn print_circuit() {
-    //     use plotters::prelude::*;
-    //     // construct battleship board pattern #1
-    //     let board = Board::from(&Deck::from([
-    //         Some((3, 3, true)),
-    //         Some((5, 4, false)),
-    //         Some((0, 1, false)),
-    //         Some((0, 5, true)),
-    //         Some((6, 1, false)),
-    //     ]));
-    //     // take the poseidon hash of the board state as the public board commitment
-    //     // construct BoardValidity circuit
-    //     let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(
-    //         board.witness(DEFAULT_WITNESS_OPTIONS),
-    //         board.state(DEFAULT_WITNESS_OPTIONS),
-    //     );
-    //     let root =
-    //         BitMapBackend::new("src/board/board_layout.png", (1920, 1080)).into_drawing_area();
-    //     root.fill(&WHITE).unwrap();
-    //     let root = root
-    //         .titled("Placement Circuit Layout", ("sans-serif", 60))
-    //         .unwrap();
-
-    //     CircuitLayout::default()
-    //         // You can optionally render only a section of the circuit.
-    //         .view_width(0..2)
-    //         .view_height(0..16)
-    //         // You can hide labels, which can be useful with smaller areas.
-    //         .show_labels(false)
-    //         // Render the circuit onto your area!
-    //         // The first argument is the size parameter for the circuit.
-    //         .render(12, &circuit, &root)
-    //         .unwrap();
-    // }
+    #[test]
+    fn print_circuit() {
+        use plotters::prelude::*;
+        // construct battleship board pattern #1
+        let board = Board::from(&Deck::from([
+            Some((3, 3, true)),
+            Some((5, 4, false)),
+            Some((0, 1, false)),
+            Some((0, 5, true)),
+            Some((6, 1, false)),
+        ]));
+        // take the poseidon hash of the board state as the public board commitment
+        // construct BoardValidity circuit
+        let circuit = BoardCircuit::<P128Pow5T3, Fp>::new(
+            board.witness(DEFAULT_WITNESS_OPTIONS),
+            board.state(DEFAULT_WITNESS_OPTIONS),
+        );
+        let root =
+            BitMapBackend::new("board_layout.png", (1920, 1080)).into_drawing_area();
+        root.fill(&WHITE).unwrap();
+        let root = root
+            .titled("Board Circuit Layout", ("sans-serif", 60))
+            .unwrap();
+        CircuitLayout::default()
+            // You can optionally render only a section of the circuit.
+            .view_width(0..2)
+            .view_height(0..16)
+            // You can hide labels, which can be useful with smaller areas.
+            .show_labels(false)
+            // Render the circuit onto your area!
+            // The first argument is the size parameter for the circuit.
+            .render(15, &circuit, &root)
+            .unwrap();
+    }
 }

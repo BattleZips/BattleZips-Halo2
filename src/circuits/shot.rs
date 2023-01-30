@@ -13,7 +13,7 @@ use {
 };
 
 #[derive(Debug, Clone, Copy)]
-struct ShotCircuit<S: Spec<F, 3, 2>, F: FieldExt> {
+pub struct ShotCircuit<S: Spec<F, 3, 2>, F: FieldExt> {
     pub board: BinaryValue,
     pub shot: BinaryValue,
     pub hit: BinaryValue,
@@ -69,7 +69,7 @@ mod test {
         },
         halo2_gadgets::poseidon::primitives::{ConstantLength, Hash as Poseidon, P128Pow5T3},
         halo2_proofs::{
-            dev::{FailureLocation, MockProver, VerifyFailure},
+            dev::{CircuitLayout, FailureLocation, MockProver, VerifyFailure},
             pasta::Fp,
             plonk::Any,
         },
@@ -741,35 +741,34 @@ mod test {
         );
     }
 
-    // #[test]
-    // fn print_circuit() {
-    //     use plotters::prelude::*;
-    //     let board = Board::from(&Deck::from([
-    //         Some((3, 4, false)),
-    //         Some((9, 6, true)),
-    //         Some((0, 0, false)),
-    //         Some((0, 6, false)),
-    //         Some((6, 1, true)),
-    //     ]));
-    //     let shot = serialize::<1>([1], [6]);
-    //     let hit = BinaryValue::from_u8(1);
-    //     let circuit =
-    //         ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
-    //     let root = BitMapBackend::new("src/shot/shot_layout.png", (1920, 1080)).into_drawing_area();
-    //     root.fill(&WHITE).unwrap();
-    //     let root = root
-    //         .titled("Shot Circuit Layout", ("sans-serif", 60))
-    //         .unwrap();
-
-    //     CircuitLayout::default()
-    //         // You can optionally render only a section of the circuit.
-    //         .view_width(0..2)
-    //         .view_height(0..16)
-    //         // You can hide labels, which can be useful with smaller areas.
-    //         .show_labels(false)
-    //         // Render the circuit onto your area!
-    //         // The first argument is the size parameter for the circuit.
-    //         .render(12, &circuit, &root)
-    //         .unwrap();
-    // }
+    #[test]
+    fn print_circuit() {
+        use plotters::prelude::*;
+        let board = Board::from(&Deck::from([
+            Some((3, 4, false)),
+            Some((9, 6, true)),
+            Some((0, 0, false)),
+            Some((0, 6, false)),
+            Some((6, 1, true)),
+        ]));
+        let shot = serialize::<1>([1], [6]);
+        let hit = BinaryValue::from_u8(1);
+        let circuit =
+            ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+        let root = BitMapBackend::new("shot_layout.png", (1920, 1080)).into_drawing_area();
+        root.fill(&WHITE).unwrap();
+        let root = root
+            .titled("Shot Circuit Layout", ("sans-serif", 60))
+            .unwrap();
+        CircuitLayout::default()
+            // You can optionally render only a section of the circuit.
+            .view_width(0..2)
+            .view_height(0..16)
+            // You can hide labels, which can be useful with smaller areas.
+            .show_labels(false)
+            // Render the circuit onto your area!
+            // The first argument is the size parameter for the circuit.
+            .render(12, &circuit, &root)
+            .unwrap();
+    }
 }
