@@ -24,10 +24,10 @@ dev-graph = [
     "plotters/bitmap_encoder",
 ]
 
-# [[bench]]
-# name = "shot"
-# path = "benches/shot.rs"
-# harness = false
+[[bench]]
+name = "shot"
+path = "benches/shot.rs"
+harness = false
 
 # [[bench]]
 # name = "board"
