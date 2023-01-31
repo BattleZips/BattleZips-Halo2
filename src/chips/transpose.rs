@@ -99,8 +99,8 @@ impl<F: FieldExt> TransposeChip<F> {
     pub fn synthesize(
         &self,
         layouter: &mut impl Layouter<F>,
-        bits: [F; BOARD_SIZE],
-        placements: [[AssignedCell<F, F>; BOARD_SIZE]; 10],
+        bits: &[F; BOARD_SIZE],
+        placements: &[[AssignedCell<F, F>; BOARD_SIZE]; 10],
     ) -> Result<[AssignedCell<F, F>; BOARD_SIZE], Error> {
         Ok(layouter
             .assign_region(

@@ -55,9 +55,9 @@ pub trait PlacementInstructions<F: FieldExt, const S: usize> {
     fn load_bits(
         &self,
         layouter: &mut impl Layouter<F>,
-        bits: [F; BOARD_SIZE],
-        horizontal: AssignedBits<F>,
-        vertical: AssignedBits<F>,
+        bits: &[F; BOARD_SIZE],
+        horizontal: &AssignedBits<F>,
+        vertical: &AssignedBits<F>,
     ) -> Result<AssignedBits<F>, Error>;
 
     /**
@@ -70,8 +70,8 @@ pub trait PlacementInstructions<F: FieldExt, const S: usize> {
     fn placement_sums(
         &self,
         layouter: &mut impl Layouter<F>,
-        bits: AssignedBits<F>,
-        trace: PlacementTrace<F>,
+        bits: &AssignedBits<F>,
+        trace: &PlacementTrace<F>,
     ) -> Result<PlacementState<F>, Error>;
 
     /**
@@ -82,7 +82,7 @@ pub trait PlacementInstructions<F: FieldExt, const S: usize> {
     fn assign_constraint(
         &self,
         layouter: &mut impl Layouter<F>,
-        state: PlacementState<F>,
+        state: &PlacementState<F>,
     ) -> Result<(), Error>;
 }
 
@@ -267,17 +267,17 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
     pub fn synthesize(
         &self,
         layouter: &mut impl Layouter<F>,
-        ship: BinaryValue,
-        horizontal: AssignedBits<F>,
-        vertical: AssignedBits<F>,
+        ship: &BinaryValue,
+        horizontal: &AssignedBits<F>,
+        vertical: &AssignedBits<F>,
     ) -> Result<(), Error> {
         // load values in memoru
         let bits = ship.bitfield();
         let trace = compute_placement_trace::<F, S>(ship);
         // begin proof synthesis
-        let assigned_bits = self.load_bits(layouter, bits, horizontal, vertical)?;
-        let running_sums = self.placement_sums(layouter, assigned_bits, trace)?;
-        self.assign_constraint(layouter, running_sums)?;
+        let assigned_bits = self.load_bits(layouter, &bits, horizontal, vertical)?;
+        let running_sums = self.placement_sums(layouter, &assigned_bits, &trace)?;
+        self.assign_constraint(layouter, &running_sums)?;
         Ok(())
     }
 }
@@ -286,9 +286,9 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
     fn load_bits(
         &self,
         layouter: &mut impl Layouter<F>,
-        bits: [F; BOARD_SIZE],
-        horizontal: AssignedBits<F>,
-        vertical: AssignedBits<F>,
+        bits: &[F; BOARD_SIZE],
+        horizontal: &AssignedBits<F>,
+        vertical: &AssignedBits<F>,
     ) -> Result<AssignedBits<F>, Error> {
         Ok(layouter.assign_region(
             || "permute and collapse bit decompositions",
@@ -323,8 +323,8 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
     fn placement_sums(
         &self,
         layouter: &mut impl Layouter<F>,
-        bits2num: AssignedBits<F>,
-        trace: PlacementTrace<F>,
+        bits2num: &AssignedBits<F>,
+        trace: &PlacementTrace<F>,
     ) -> Result<PlacementState<F>, Error> {
         Ok(layouter.assign_region(
             || "placement running sum trace",
@@ -344,7 +344,7 @@ impl<F: FieldExt, const S: usize> PlacementInstructions<F, S> for PlacementChip<
     fn assign_constraint(
         &self,
         layouter: &mut impl Layouter<F>,
-        state: PlacementState<F>,
+        state: &PlacementState<F>,
     ) -> Result<(), Error> {
         Ok(layouter.assign_region(
             || "constrain running sum output",
@@ -378,7 +378,7 @@ pub type PlacementTrace<F> = [[F; BOARD_SIZE]; 2];
  * @return - bit_sum and full_bit_window cell values for assignment
  */
 pub fn compute_placement_trace<F: FieldExt, const S: usize>(
-    ship: BinaryValue,
+    ship: &BinaryValue,
 ) -> PlacementTrace<F> {
     let bits = ship.bitfield::<F, BOARD_SIZE>();
     // compute bit_sum trace

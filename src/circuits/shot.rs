@@ -123,7 +123,7 @@ mod test {
             (x, y)
         };
         // assign public output values
-        let public_inputs = vec![
+        let public_outputs = vec![
             commitment.0,
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()),
@@ -132,7 +132,7 @@ mod test {
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove a valid hit assertion for a given board commitment to board pattern 1
-        let prover = MockProver::run(11, &circuit, vec![public_inputs]).unwrap();
+        let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -162,7 +162,7 @@ mod test {
             (x, y)
         };
         // assign public output values
-        let public_inputs = vec![
+        let public_outputs = vec![
             commitment.0,
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()),
@@ -171,7 +171,7 @@ mod test {
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove a valid hit assertion for a given board commitment to board pattern 2
-        let prover = MockProver::run(11, &circuit, vec![public_inputs]).unwrap();
+        let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -201,7 +201,7 @@ mod test {
             (x, y)
         };
         // assign public output values
-        let public_inputs = vec![
+        let public_outputs = vec![
             commitment.0,
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()),
@@ -210,7 +210,7 @@ mod test {
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove a valid miss assertion for a given board commitment to board pattern 1
-        let prover = MockProver::run(11, &circuit, vec![public_inputs]).unwrap();
+        let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -240,7 +240,7 @@ mod test {
             (x, y)
         };
         // assign public output values
-        let public_inputs = vec![
+        let public_outputs = vec![
             commitment.0,
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()),
@@ -249,7 +249,7 @@ mod test {
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove a valid miss assertion for a given board commitment on board pattern 2
-        let prover = MockProver::run(11, &circuit, vec![public_inputs]).unwrap();
+        let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -279,7 +279,7 @@ mod test {
             (x, y)
         };
         // assign public output values
-        let public_inputs = vec![
+        let public_outputs = vec![
             commitment.0,
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()),
@@ -288,7 +288,7 @@ mod test {
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove a non-boolean hit assertions will fail verification
-        let prover = MockProver::run(11, &circuit, vec![public_inputs]).unwrap();
+        let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         // expect failure
         assert_eq!(
             prover.verify(),
@@ -354,7 +354,7 @@ mod test {
             (x, y)
         };
         // assign public output values
-        let public_inputs = vec![
+        let public_outputs = vec![
             commitment.0,
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()),
@@ -363,7 +363,7 @@ mod test {
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove that asserting a hit when shot misses fails verification
-        let prover = MockProver::run(11, &circuit, vec![public_inputs]).unwrap();
+        let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         // expect failure
         assert_eq!(
             prover.verify(),
@@ -413,7 +413,7 @@ mod test {
             (x, y)
         };
         // assign public output values
-        let public_inputs = vec![
+        let public_outputs = vec![
             commitment.0,
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()),
@@ -422,7 +422,7 @@ mod test {
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove that asserting a miss when shot hits fails verification
-        let prover = MockProver::run(11, &circuit, vec![public_inputs]).unwrap();
+        let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         // expect failure
         assert_eq!(
             prover.verify(),
@@ -472,7 +472,7 @@ mod test {
             (x, y)
         };
         // assign public output values
-        let public_inputs = vec![
+        let public_outputs = vec![
             commitment.0,
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()),
@@ -481,7 +481,7 @@ mod test {
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove that providing no shot commitment fails verification
-        let prover = MockProver::run(11, &circuit, vec![public_inputs]).unwrap();
+        let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         // expect failure
         assert_eq!(
             prover.verify(),
@@ -528,7 +528,7 @@ mod test {
             (x, y)
         };
         // assign public output values
-        let public_inputs = vec![
+        let public_outputs = vec![
             commitment.0,
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()),
@@ -537,7 +537,7 @@ mod test {
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove that attempting multiple shots in one shot commitment fails verification
-        let prover = MockProver::run(11, &circuit, vec![public_inputs]).unwrap();
+        let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         // expect failure
         assert_eq!(
             prover.verify(),
@@ -585,7 +585,7 @@ mod test {
             (x, y)
         };
         // assign public output values
-        let public_inputs = vec![
+        let public_outputs = vec![
             commitment.0,
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()),
@@ -594,7 +594,7 @@ mod test {
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove that finding multiple hits in one shot commitment fails verification
-        let prover = MockProver::run(11, &circuit, vec![public_inputs]).unwrap();
+        let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         // expect failure
         assert_eq!(
             prover.verify(),
@@ -660,7 +660,7 @@ mod test {
             (x, y)
         };
         // assign public output values
-        let public_inputs = vec![
+        let public_outputs = vec![
             commitment.0,
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()),
@@ -669,7 +669,7 @@ mod test {
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove that providing an invalid board commitment fails verification
-        let prover = MockProver::run(11, &circuit, vec![public_inputs]).unwrap();
+        let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         // expect failure
         assert_eq!(
             prover.verify(),
@@ -715,8 +715,8 @@ mod test {
             (x, y)
         };
         // assign public output values
-        // add 1 to public_inputs[0] to throw off public assertion to board commitment
-        let public_inputs = vec![
+        // add 1 to public_outputs[0] to throw off public assertion to board commitment
+        let public_outputs = vec![
             commitment.0 + pallas::Base::one(),
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()),
@@ -725,7 +725,7 @@ mod test {
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove that providing an invalid board commitment publicly fails verification
-        let prover = MockProver::run(11, &circuit, vec![public_inputs]).unwrap();
+        let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         // expect failure
         assert_eq!(
             prover.verify(),
@@ -771,8 +771,8 @@ mod test {
             (x, y)
         };
         // assign public output values
-        // add 1 to public_inputs[2] to throw off public assertion to shot commitment
-        let public_inputs = vec![
+        // add 1 to public_outputs[2] to throw off public assertion to shot commitment
+        let public_outputs = vec![
             commitment.0,
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()) + pallas::Base::one(),
@@ -781,7 +781,7 @@ mod test {
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove that providing an invalid shot commitment publicly fails verification
-        let prover = MockProver::run(11, &circuit, vec![public_inputs]).unwrap();
+        let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         // expect failure
         assert_eq!(
             prover.verify(),
@@ -827,8 +827,8 @@ mod test {
             (x, y)
         };
         // assign public output values
-        // add 1 to public_inputs[3] to throw off public assertion to hit
-        let public_inputs = vec![
+        // add 1 to public_outputs[3] to throw off public assertion to hit
+        let public_outputs = vec![
             commitment.0,
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()),
@@ -837,7 +837,7 @@ mod test {
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove that providing an invalid hit publicly fails verification
-        let prover = MockProver::run(11, &circuit, vec![public_inputs]).unwrap();
+        let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         // expect failure
         assert_eq!(
             prover.verify(),
@@ -899,7 +899,7 @@ mod test {
             (x, y)
         };
         // assign public output values
-        let public_inputs = vec![
+        let public_outputs = vec![
             commitment.0,
             commitment.1,
             pallas::Base::from_u128(shot.lower_u128()),
@@ -918,7 +918,7 @@ mod test {
             &params,
             &pk,
             &[circuit],
-            &[&[&public_inputs]],
+            &[&[&public_outputs]],
             &mut OsRng,
             &mut transcript,
         )
@@ -930,7 +930,7 @@ mod test {
             &params,
             pk.get_vk(),
             strategy,
-            &[&[&public_inputs]],
+            &[&[&public_outputs]],
             &mut transcript
         )
         .is_ok());

@@ -110,7 +110,7 @@ pub trait BoardInstructions {
     fn load_commitments(
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
-        ship_commitments: [BinaryValue; 10],
+        ship_commitments: &[BinaryValue; 10],
     ) -> Result<Commitments, Error>;
 
     /**
@@ -122,8 +122,8 @@ pub trait BoardInstructions {
     fn decompose_commitments(
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
-        ship_commitments: [BinaryValue; 10],
-        commitment: [AssignedCell<pallas::Base, pallas::Base>; 10],
+        ship_commitments: &[BinaryValue; 10],
+        commitment: &[AssignedCell<pallas::Base, pallas::Base>; 10],
     ) -> Result<Placements, Error>;
 
     /**
@@ -136,8 +136,8 @@ pub trait BoardInstructions {
     fn synth_placements(
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
-        ships: [BinaryValue; 5],
-        placements: Placements,
+        ships: &[BinaryValue; 5],
+        placements: &Placements,
     ) -> Result<(), Error>;
 
     /**
@@ -150,8 +150,8 @@ pub trait BoardInstructions {
     fn transpose_placements(
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
-        board: BinaryValue,
-        placements: Placements,
+        board: &BinaryValue,
+        placements: &Placements,
     ) -> Result<AssignedBits<pallas::Base>, Error>;
 
     /**
@@ -164,8 +164,8 @@ pub trait BoardInstructions {
     fn recompose_board(
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
-        board: BinaryValue,
-        transposed: [AssignedCell<pallas::Base, pallas::Base>; BOARD_SIZE],
+        board: &BinaryValue,
+        transposed: &[AssignedCell<pallas::Base, pallas::Base>; BOARD_SIZE],
     ) -> Result<AssignedCell<pallas::Base, pallas::Base>, Error>;
 
     /**
@@ -178,8 +178,8 @@ pub trait BoardInstructions {
     fn commit_board(
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
-        board_state: AssignedCell<pallas::Base, pallas::Base>,
-        board_commitment_trapdoor: pallas::Scalar,
+        board_state: &AssignedCell<pallas::Base, pallas::Base>,
+        board_commitment_trapdoor: &pallas::Scalar,
     ) -> Result<[AssignedCell<pallas::Base, pallas::Base>; 2], Error>;
 }
 
@@ -342,20 +342,20 @@ impl BoardChip {
         }
         let ships: [BinaryValue; 5] = ships.try_into().unwrap();
         // load ship commitments into advice
-        let assigned_commitments = self.load_commitments(&mut layouter, ship_commitments)?;
+        let assigned_commitments = self.load_commitments(&mut layouter, &ship_commitments)?;
         // decompose commitments into 100 bits each
         let placements =
-            self.decompose_commitments(&mut layouter, ship_commitments, assigned_commitments)?;
+            self.decompose_commitments(&mut layouter, &ship_commitments, &assigned_commitments)?;
         // run individual ship placement rule checks
-        self.synth_placements(&mut layouter, ships, placements.clone())?;
+        self.synth_placements(&mut layouter, &ships, &placements)?;
         // check that ships can all be placed together to form a valid board
         let transposed_bits =
-            self.transpose_placements(&mut layouter, board, placements.clone())?;
+            self.transpose_placements(&mut layouter, &board, &placements)?;
         // recompose the 100 bit board state into a single value
-        let transposed = self.recompose_board(&mut layouter, board, transposed_bits)?;
+        let transposed = self.recompose_board(&mut layouter, &board, &transposed_bits)?;
         // synthesize pedersen commitment to board state
         let commitment =
-            self.commit_board(&mut layouter, transposed, board_commitment_trapdoor)?;
+            self.commit_board(&mut layouter, &transposed, &board_commitment_trapdoor)?;
         // // compute the pedersen commitment to publicly attest to
         // let commitment_values = {
         //     let board_state = pallas::Base::from_u128(board.lower_u128());
@@ -376,7 +376,7 @@ impl BoardInstructions for BoardChip {
     fn load_commitments(
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
-        ship_commitments: [BinaryValue; 10],
+        ship_commitments: &[BinaryValue; 10],
     ) -> Result<Commitments, Error> {
         let assigned: [AssignedCell<pallas::Base, pallas::Base>; 10] = layouter.assign_region(
             || "load ship placements",
@@ -402,8 +402,8 @@ impl BoardInstructions for BoardChip {
     fn decompose_commitments(
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
-        ship_commitments: [BinaryValue; 10],
-        assigned_commitments: [AssignedCell<pallas::Base, pallas::Base>; 10],
+        ship_commitments: &[BinaryValue; 10],
+        assigned_commitments: &[AssignedCell<pallas::Base, pallas::Base>; 10],
     ) -> Result<Placements, Error> {
         let mut placements = Vec::<AssignedBits<pallas::Base>>::new();
         for i in 0..10 {
@@ -425,38 +425,38 @@ impl BoardInstructions for BoardChip {
     fn synth_placements(
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
-        ships: [BinaryValue; 5],
-        placements: Placements,
+        ships: &[BinaryValue; 5],
+        placements: &Placements,
     ) -> Result<(), Error> {
         PlacementChip::<pallas::Base, 5>::new(self.config.placement.carrier).synthesize(
             layouter,
-            ships[0],
-            placements[0].clone(),
-            placements[1].clone(),
+            &ships[0],
+            &placements[0],
+            &placements[1],
         )?;
         PlacementChip::<pallas::Base, 4>::new(self.config.placement.battleship).synthesize(
             layouter,
-            ships[1],
-            placements[2].clone(),
-            placements[3].clone(),
+            &ships[1],
+            &placements[2],
+            &placements[3],
         )?;
         PlacementChip::<pallas::Base, 3>::new(self.config.placement.cruiser).synthesize(
             layouter,
-            ships[2],
-            placements[4].clone(),
-            placements[5].clone(),
+            &ships[2],
+            &placements[4],
+            &placements[5],
         )?;
         PlacementChip::<pallas::Base, 3>::new(self.config.placement.submarine).synthesize(
             layouter,
-            ships[3],
-            placements[6].clone(),
-            placements[7].clone(),
+            &ships[3],
+            &placements[6],
+            &placements[7],
         )?;
         PlacementChip::<pallas::Base, 2>::new(self.config.placement.destroyer).synthesize(
             layouter,
-            ships[4],
-            placements[8].clone(),
-            placements[9].clone(),
+            &ships[4],
+            &placements[8],
+            &placements[9],
         )?;
         Ok(())
     }
@@ -464,19 +464,19 @@ impl BoardInstructions for BoardChip {
     fn transpose_placements(
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
-        board: BinaryValue,
-        placements: Placements,
+        board: &BinaryValue,
+        placements: &Placements,
     ) -> Result<AssignedBits<pallas::Base>, Error> {
         let chip = TransposeChip::<pallas::Base>::new(self.config.transpose);
         let bits = board.bitfield::<pallas::Base, BOARD_SIZE>();
-        Ok(chip.synthesize(layouter, bits, placements).unwrap())
+        Ok(chip.synthesize(layouter, &bits, placements).unwrap())
     }
 
     fn recompose_board(
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
-        board: BinaryValue,
-        transposed: [AssignedCell<pallas::Base, pallas::Base>; BOARD_SIZE],
+        board: &BinaryValue,
+        transposed: &[AssignedCell<pallas::Base, pallas::Base>; BOARD_SIZE],
     ) -> Result<AssignedCell<pallas::Base, pallas::Base>, Error> {
         Ok(Bits2NumChip::<pallas::Base, BOARD_SIZE>::new(
             pallas::Base::from_u128(board.lower_u128()),
@@ -491,14 +491,14 @@ impl BoardInstructions for BoardChip {
     fn commit_board(
         &self,
         layouter: &mut impl Layouter<pallas::Base>,
-        board_state: AssignedCell<pallas::Base, pallas::Base>,
-        board_commitment_trapdoor: pallas::Scalar,
+        board_state: &AssignedCell<pallas::Base, pallas::Base>,
+        board_commitment_trapdoor: &pallas::Scalar,
     ) -> Result<[AssignedCell<pallas::Base, pallas::Base>; 2], Error> {
         let chip = PedersenCommitmentChip::new(self.config.pedersen.clone());
         let commitment = chip.synthesize(
             layouter.namespace(|| "pedersen"),
             &board_state,
-            Value::known(board_commitment_trapdoor),
+            Value::known(board_commitment_trapdoor.clone()),
         )?;
         // return pedersen commitment points
         Ok([

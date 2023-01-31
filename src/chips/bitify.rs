@@ -141,10 +141,10 @@ impl<F: FieldExt, const B: usize> Num2BitsChip<F, B> {
 // bits2num chip implementation
 impl<F: FieldExt, const B: usize> Bits2NumChip<F, B> {
     /// Create a new chip.
-    pub fn new(value: F, bits: [AssignedCell<F, F>; B]) -> Self {
+    pub fn new(value: F, bits: &[AssignedCell<F, F>; B]) -> Self {
         Self {
             value: Value::known(value),
-            bits,
+            bits: bits.to_owned(),
         }
     }
 
@@ -392,7 +392,7 @@ mod test {
                 },
             )?;
 
-            let bits2num = Bits2NumChip::new(self.value, assigned);
+            let bits2num = Bits2NumChip::new(self.value, &assigned);
             let _ = bits2num.synthesize(config.bitify, layouter.namespace(|| "bits2num"))?;
 
             Ok(())
