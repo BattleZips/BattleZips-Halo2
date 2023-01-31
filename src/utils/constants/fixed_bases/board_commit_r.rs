@@ -1,8 +1,7 @@
 use halo2_gadgets::ecc::chip::constants::{H, NUM_WINDOWS};
 use halo2_proofs::pasta::{arithmetic::CurveAffine, group::ff::PrimeField, pallas};
 
-/// The ship commitment is used to bind and blind a board configuration . The value is
-/// placed over this generator.
+/// The blinding factor for a board commitment. The value is placed over this generator.
 pub const GENERATOR: ([u8; 32], [u8; 32]) = (
     [
         119, 82, 14, 115, 187, 149, 110, 223, 85, 92, 198, 229, 144, 203, 147, 22, 12, 196, 139,

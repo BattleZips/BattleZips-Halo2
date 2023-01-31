@@ -1,24 +1,26 @@
-use halo2_gadgets::poseidon::primitives::ConstantLength;
 
 use {
     crate::{
-        chips::bitify::{BitifyConfig, Num2BitsChip},
-        utils::{binary::BinaryValue, board::BOARD_SIZE},
-    },
-    halo2_gadgets::poseidon::{
-        primitives::Spec,
-        Hash, Pow5Chip, Pow5Config,
+        chips::{
+            bitify::{BitifyConfig, Num2BitsChip},
+            pedersen::{PedersenCommitmentChip, PedersenCommitmentConfig},
+        },
+        utils::{
+            binary::BinaryValue,
+            board::BOARD_SIZE,
+            pedersen::pedersen_commit
+        },
     },
     halo2_proofs::{
-        arithmetic::FieldExt,
+        arithmetic::{FieldExt, CurveAffine},
         circuit::{AssignedCell, Chip, Layouter, Value},
+        pasta::{pallas, group::Curve},
         plonk::{
             Advice, Column, ConstraintSystem, Constraints, Error, Expression, Fixed, Instance,
-            Selector,
+            Selector, TableColumn,
         },
         poly::Rotation,
     },
-    std::marker::PhantomData,
 };
 
 /**
@@ -28,23 +30,23 @@ use {
  * @param shot - shot (contains only 1 flipped bit) to query for hit or miss
  * @return - array of 100 assignments for shot_commitment bit sum and board hit sum
  */
-pub fn compute_shot_trace<F: FieldExt>(
+pub fn compute_shot_trace(
     board: BinaryValue,
     shot: BinaryValue,
-) -> [[F; BOARD_SIZE]; 2] {
-    let mut hit_trace = Vec::<F>::new();
-    let mut shot_trace = Vec::<F>::new();
+) -> [[pallas::Base; BOARD_SIZE]; 2] {
+    let mut hit_trace = Vec::<pallas::Base>::new();
+    let mut shot_trace = Vec::<pallas::Base>::new();
 
     // assign first round manually
-    hit_trace.push(F::from(board.value[0] && shot.value[0]));
-    shot_trace.push(F::from(shot.value[0]));
+    hit_trace.push(pallas::Base::from(board.value[0] && shot.value[0]));
+    shot_trace.push(pallas::Base::from(shot.value[0]));
     for i in 1..BOARD_SIZE {
         // hit_trace: if board and shot have flipped bit, prev hit_trace + 1 else prev hit trace
         let condition = board.value[i] && shot.value[i];
-        let new_hit_trace = hit_trace[hit_trace.len() - 1] + F::from(condition);
+        let new_hit_trace = hit_trace[hit_trace.len() - 1] + pallas::Base::from(condition);
         hit_trace.push(new_hit_trace);
         // shot_trace: prev shot_trace + shot_trace
-        let new_shot_trace = shot_trace[shot_trace.len() - 1] + F::from(shot.value[i]);
+        let new_shot_trace = shot_trace[shot_trace.len() - 1] + pallas::Base::from(shot.value[i]);
         shot_trace.push(new_shot_trace);
     }
     [
@@ -62,24 +64,25 @@ pub fn compute_shot_trace<F: FieldExt>(
  * @param fixed - fixed columns for constant values in ShotChip
  */
 #[derive(Clone, Debug)]
-pub struct ShotConfig<F: FieldExt> {
+pub struct ShotConfig {
+    // chip configs
     pub num2bits: [BitifyConfig; 2],
-    pub poseidon: Pow5Config<F, 3, 2>,
-    pub input: Column<Advice>,
-    pub advice: [Column<Advice>; 4],
+    pub pedersen: PedersenCommitmentConfig,
+    // columns
+    pub advice: [Column<Advice>; 10],
+    pub fixed: [Column<Fixed>; 8],
+    pub table_idx: TableColumn,
     pub instance: Column<Instance>,
-    pub fixed: [Column<Fixed>; 6],
+    // selectors
     pub selectors: [Selector; 3],
-    _marker: PhantomData<F>,
 }
 
-pub struct ShotChip<S: Spec<F, 3, 2>, F: FieldExt> {
-    config: ShotConfig<F>,
-    _marker: PhantomData<S>,
+pub struct ShotChip {
+    config: ShotConfig,
 }
 
-impl<S: Spec<F, 3, 2>, F: FieldExt> Chip<F> for ShotChip<S, F> {
-    type Config = ShotConfig<F>;
+impl Chip<pallas::Base> for ShotChip {
+    type Config = ShotConfig;
     type Loaded = ();
 
     fn config(&self) -> &Self::Config {
@@ -91,7 +94,7 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> Chip<F> for ShotChip<S, F> {
     }
 }
 
-pub trait ShotInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
+pub trait ShotInstructions {
     /**
      * Load the private advice inputs into the chip
      *
@@ -103,12 +106,12 @@ pub trait ShotInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
      */
     fn load_advice(
         &self,
-        layouter: &mut impl Layouter<F>,
-        board_state: F,
-        board_commitment: F,
-        shot_commitment: F,
-        hit: F,
-    ) -> Result<[AssignedCell<F, F>; 4], Error>;
+        layouter: &mut impl Layouter<pallas::Base>,
+        board_state: pallas::Base,
+        board_commitment: [pallas::Base; 2],
+        shot_commitment: pallas::Base,
+        hit: pallas::Base,
+    ) -> Result<[AssignedCell<pallas::Base, pallas::Base>; 5], Error>;
 
     /**
      * Decompose board_state, shot_commitment into 100 bits each
@@ -120,10 +123,10 @@ pub trait ShotInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
      */
     fn decompose(
         &self,
-        layouter: &mut impl Layouter<F>,
-        num: [AssignedCell<F, F>; 2],
-        bits: [[F; BOARD_SIZE]; 2],
-    ) -> Result<[[AssignedCell<F, F>; BOARD_SIZE]; 2], Error>;
+        layouter: &mut impl Layouter<pallas::Base>,
+        num: [AssignedCell<pallas::Base, pallas::Base>; 2],
+        bits: [[pallas::Base; BOARD_SIZE]; 2],
+    ) -> Result<[[AssignedCell<pallas::Base, pallas::Base>; BOARD_SIZE]; 2], Error>;
 
     /**
      * Perform the running sum constrains comparing the shot commitment and board state bits
@@ -136,10 +139,10 @@ pub trait ShotInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
      */
     fn running_sums(
         &self,
-        layouter: &mut impl Layouter<F>,
-        bits: [[AssignedCell<F, F>; BOARD_SIZE]; 2],
-        trace: [[F; BOARD_SIZE]; 2],
-    ) -> Result<[AssignedCell<F, F>; 2], Error>;
+        layouter: &mut impl Layouter<pallas::Base>,
+        bits: [[AssignedCell<pallas::Base, pallas::Base>; BOARD_SIZE]; 2],
+        trace: [[pallas::Base; BOARD_SIZE]; 2],
+    ) -> Result<[AssignedCell<pallas::Base, pallas::Base>; 2], Error>;
 
     /**
      * Apply constraints to the output of the running sum trace
@@ -150,58 +153,59 @@ pub trait ShotInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
      */
     fn running_sum_output(
         &self,
-        layouter: &mut impl Layouter<F>,
-        hit: AssignedCell<F, F>,
-        output: [AssignedCell<F, F>; 2],
+        layouter: &mut impl Layouter<pallas::Base>,
+        hit: AssignedCell<pallas::Base, pallas::Base>,
+        output: [AssignedCell<pallas::Base, pallas::Base>; 2],
     ) -> Result<(), Error>;
 
     /**
-     * Hash the private board state
+     * Compute the pedersen commitment to the board state
      *
-     * @param preimage - the private board state (bits2num'ed)
-     * @return - assigned cell storing poseidon hash of the board state
+     * @param board_state - base field element that can be decomposed into board state
+     * @param board_commitment_trapdoor - scalar field element used to blind the commitment
+     * @return - assigned cell storing the (x, y) coordinates of commitment on pallas curve
      */
-    fn hash_board(
+    fn commit_board(
         &self,
-        layouter: &mut impl Layouter<F>,
-        preimage: AssignedCell<F, F>,
-    ) -> Result<AssignedCell<F, F>, Error>;
+        layouter: &mut impl Layouter<pallas::Base>,
+        board_state: AssignedCell<pallas::Base, pallas::Base>,
+        board_commitment_trapdoor: pallas::Scalar,
+    ) -> Result<[AssignedCell<pallas::Base, pallas::Base>; 2], Error>;
 }
 
-impl<S: Spec<F, 3, 2>, F: FieldExt> ShotChip<S, F> {
-    pub fn new(config: ShotConfig<F>) -> Self {
-        ShotChip {
-            config,
-            _marker: PhantomData,
-        }
+impl ShotChip {
+    pub fn new(config: ShotConfig) -> Self {
+        ShotChip { config }
     }
 
     /**
      * Configure the computation space of the circuit & return ShotConfig
      */
-    pub fn configure(meta: &mut ConstraintSystem<F>) -> ShotConfig<F> {
+    pub fn configure(meta: &mut ConstraintSystem<pallas::Base>) -> ShotConfig {
         // define advice
         let mut advice = Vec::<Column<Advice>>::new();
-        for _ in 0..4 {
+        for _ in 0..10 {
             let col = meta.advice_column();
             meta.enable_equality(col);
             advice.push(col);
         }
-        let advice: [Column<Advice>; 4] = advice.try_into().unwrap();
+        let advice: [Column<Advice>; 10] = advice.try_into().unwrap();
         let input = meta.advice_column();
         meta.enable_equality(input);
 
         // define fixed
         let mut fixed = Vec::<Column<Fixed>>::new();
-        for _ in 0..6 {
+        for _ in 0..8 {
             let col = meta.fixed_column();
             fixed.push(col);
         }
-        // poseidon rc_a: fixed[3..6]
-        // poseidon rc_b: fixed[0..3]
+
         // fixed[0] has constant enabled
-        let fixed: [Column<Fixed>; 6] = fixed.try_into().unwrap();
+        let fixed: [Column<Fixed>; 8] = fixed.try_into().unwrap();
         meta.enable_constant(fixed[0]);
+
+        // define table column
+        let table_idx = meta.lookup_table_column();
 
         // define instance
         let instance = meta.instance_column();
@@ -218,24 +222,18 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotChip<S, F> {
         let mut num2bits = Vec::<BitifyConfig>::new();
         for _ in 0..2 {
             num2bits.push(Num2BitsChip::<_, BOARD_SIZE>::configure(
-                meta, advice[0], advice[1], advice[2], fixed[0],
+                meta, advice[5], advice[6], advice[7], fixed[0],
             ));
         }
         let num2bits: [BitifyConfig; 2] = num2bits.try_into().unwrap();
 
-        // define poseidon hash chip
-        let poseidon = Pow5Chip::<F, 3, 2>::configure::<S>(
-            meta,
-            [advice[0], advice[1], advice[2]],
-            advice[3],
-            [fixed[3], fixed[4], fixed[5]],
-            [fixed[0], fixed[1], fixed[2]],
-        );
+        // define pedersen chop
+        let pedersen = PedersenCommitmentChip::configure(meta, advice, fixed, table_idx);
 
         // define gates
         meta.create_gate("boolean hit assertion", |meta| {
-            let assertion = meta.query_advice(input, Rotation::cur());
-            let one = Expression::Constant(F::one());
+            let assertion = meta.query_advice(advice[4], Rotation::cur());
+            let one = Expression::Constant(pallas::Base::one());
             let constraint = (one - assertion.clone()) * assertion.clone();
             // constrain using selector[0]
             // - the asserted hit/miss value is a boolean (0 or 1)
@@ -245,12 +243,12 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotChip<S, F> {
 
         meta.create_gate("shot running sum row", |meta| {
             // query cells used in gate
-            let hit_bit = meta.query_advice(advice[0], Rotation::cur());
-            let shot_bit = meta.query_advice(advice[1], Rotation::cur());
-            let shot_sum = meta.query_advice(advice[2], Rotation::cur());
-            let hit_sum = meta.query_advice(advice[3], Rotation::cur());
-            let prev_shot_sum = meta.query_advice(advice[2], Rotation::prev());
-            let prev_hit_sum = meta.query_advice(advice[3], Rotation::prev());
+            let hit_bit = meta.query_advice(advice[5], Rotation::cur());
+            let shot_bit = meta.query_advice(advice[6], Rotation::cur());
+            let shot_sum = meta.query_advice(advice[7], Rotation::cur());
+            let hit_sum = meta.query_advice(advice[8], Rotation::cur());
+            let prev_shot_sum = meta.query_advice(advice[7], Rotation::prev());
+            let prev_hit_sum = meta.query_advice(advice[8], Rotation::prev());
             // constraint expressions
             let shot_constraint = shot_bit.clone() + prev_shot_sum - shot_sum;
             let hit_constraint = hit_bit * shot_bit + prev_hit_sum - hit_sum;
@@ -269,11 +267,11 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotChip<S, F> {
 
         meta.create_gate("constrain shot running sum output", |meta| {
             // query cells used in gate
-            let hit_assertion = meta.query_advice(advice[0], Rotation::cur());
-            let shot_count = meta.query_advice(advice[1], Rotation::cur());
-            let hit_count = meta.query_advice(advice[2], Rotation::cur());
+            let hit_assertion = meta.query_advice(advice[5], Rotation::cur());
+            let shot_count = meta.query_advice(advice[6], Rotation::cur());
+            let hit_count = meta.query_advice(advice[7], Rotation::cur());
             // constraint expressions
-            let shot_constraint = Expression::Constant(F::one()) - shot_count;
+            let shot_constraint = Expression::Constant(pallas::Base::one()) - shot_count;
             let hit_constraint = hit_assertion - hit_count;
             // constrain using selector[2]
             // - shot_sum = 1
@@ -294,13 +292,12 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotChip<S, F> {
         // return config
         ShotConfig {
             num2bits,
-            poseidon,
+            pedersen,
             advice,
-            input,
-            instance,
             fixed,
+            table_idx,
+            instance,
             selectors,
-            _marker: PhantomData,
         }
     }
 
@@ -314,101 +311,119 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotChip<S, F> {
      */
     pub fn synthesize(
         &self,
-        mut layouter: impl Layouter<F>,
+        mut layouter: impl Layouter<pallas::Base>,
         board: BinaryValue,
+        board_commitment_trapdoor: pallas::Scalar,
         shot: BinaryValue,
         hit: BinaryValue,
     ) -> Result<(), Error> {
         // compute values to witness
-        let board_state = F::from_u128(board.lower_u128());
-        let board_commitment = board_state; // @dev to be used for signed poseidon hash
-        let shot_commitment = F::from_u128(shot.lower_u128());
+        let board_state = pallas::Base::from_u128(board.lower_u128());
+        let board_commitment = {
+            let commitment = pedersen_commit(&board_state, &board_commitment_trapdoor).to_affine();
+            let x = commitment.clone().coordinates().unwrap().x().to_owned();
+            let y = commitment.clone().coordinates().unwrap().y().to_owned();
+            [x, y]
+        };
+        let shot_commitment = pallas::Base::from_u128(shot.lower_u128());
         let bits = [
-            board.bitfield::<F, BOARD_SIZE>(),
-            shot.bitfield::<F, BOARD_SIZE>(),
+            board.bitfield::<pallas::Base, BOARD_SIZE>(),
+            shot.bitfield::<pallas::Base, BOARD_SIZE>(),
         ];
-        let trace = compute_shot_trace::<F>(board, shot);
+        let trace = compute_shot_trace(board, shot);
         // load inputs as advice
         let inputs = self.load_advice(
             &mut layouter,
             board_state,
             board_commitment,
             shot_commitment,
-            F::from_u128(hit.lower_u128()),
+            pallas::Base::from_u128(hit.lower_u128()),
         )?;
         // decompose board_state and ship_commitment into constrained bits
         let assigned_bits =
-            self.decompose(&mut layouter, [inputs[0].clone(), inputs[2].clone()], bits)?;
+            self.decompose(&mut layouter, [inputs[0].clone(), inputs[3].clone()], bits)?;
         // synthesize running sum
         let running_sum_results = self.running_sums(&mut layouter, assigned_bits, trace)?;
         // constrain results of running sum
         self.running_sum_output(&mut layouter, inputs[3].clone(), running_sum_results)?;
-        // hash board state
-        let hashed_state = self.hash_board(&mut layouter, inputs[1].clone())?;
+        // commit to board state
+        let commitment = self.commit_board(
+            &mut layouter,
+            inputs[0].clone(),
+            board_commitment_trapdoor,
+        )?;
         // export public values
-        layouter.constrain_instance(hashed_state.cell(), self.config.instance, 0)?;
-        layouter.constrain_instance(inputs[2].cell(), self.config.instance, 1)?;
+        layouter.constrain_instance(commitment[0].cell(), self.config.instance, 0)?;
+        layouter.constrain_instance(commitment[1].cell(), self.config.instance, 0)?;
         layouter.constrain_instance(inputs[3].cell(), self.config.instance, 2)?;
+        layouter.constrain_instance(inputs[4].cell(), self.config.instance, 3)?;
         Ok(())
     }
 }
 
-impl<S: Spec<F, 3, 2>, F: FieldExt> ShotInstructions<S, F> for ShotChip<S, F> {
+impl ShotInstructions for ShotChip {
     fn load_advice(
         &self,
-        layouter: &mut impl Layouter<F>,
-        board_state: F,
-        board_commitment: F,
-        shot_commitment: F,
-        hit: F,
-    ) -> Result<[AssignedCell<F, F>; 4], Error> {
+        layouter: &mut impl Layouter<pallas::Base>,
+        board_state: pallas::Base,
+        board_commitment: [pallas::Base; 2],
+        shot_commitment: pallas::Base,
+        hit: pallas::Base,
+    ) -> Result<[AssignedCell<pallas::Base, pallas::Base>; 5], Error> {
         Ok(layouter.assign_region(
             || "load private ShotChip advice values",
             |mut region| {
                 let board_state = region.assign_advice(
                     || "assign board state",
-                    self.config.input,
+                    self.config.advice[4],
                     0,
                     || Value::known(board_state),
                 )?;
-                let board_commitment = region.assign_advice(
-                    || "assign board commitment",
-                    self.config.input,
+                let x = region.assign_advice(
+                    || "assign board state",
+                    self.config.advice[4],
                     1,
-                    || Value::known(board_commitment),
+                    || Value::known(board_commitment[0]),
+                )?;
+                let y = region.assign_advice(
+                    || "assign board state",
+                    self.config.advice[4],
+                    2,
+                    || Value::known(board_commitment[1]),
                 )?;
                 let shot_commitment = region.assign_advice(
                     || "assign shot commitment",
-                    self.config.input,
-                    2,
+                    self.config.advice[4],
+                    3,
                     || Value::known(shot_commitment),
                 )?;
                 let hit = region.assign_advice(
                     || "assign hit assertion",
-                    self.config.input,
-                    3,
+                    self.config.advice[4],
+                    4,
                     || Value::known(hit),
                 )?;
-                self.config.selectors[0].enable(&mut region, 3)?;
-                Ok([board_state, board_commitment, shot_commitment, hit])
+                // enable selector to check hit is binary
+                self.config.selectors[0].enable(&mut region, 4)?;
+                Ok([board_state, x, y, shot_commitment, hit])
             },
         )?)
     }
 
     fn decompose(
         &self,
-        layouter: &mut impl Layouter<F>,
-        num: [AssignedCell<F, F>; 2],
-        bits: [[F; BOARD_SIZE]; 2],
-    ) -> Result<[[AssignedCell<F, F>; BOARD_SIZE]; 2], Error> {
+        layouter: &mut impl Layouter<pallas::Base>,
+        num: [AssignedCell<pallas::Base, pallas::Base>; 2],
+        bits: [[pallas::Base; BOARD_SIZE]; 2],
+    ) -> Result<[[AssignedCell<pallas::Base, pallas::Base>; BOARD_SIZE]; 2], Error> {
         // decompose board state
-        let chip = Num2BitsChip::<F, BOARD_SIZE>::new(num[0].clone(), bits[0]);
+        let chip = Num2BitsChip::<pallas::Base, BOARD_SIZE>::new(num[0].clone(), bits[0]);
         let board_state = chip.synthesize(
             self.config.num2bits[0],
             layouter.namespace(|| "board_state num2bits"),
         )?;
         // decompose shot commitment
-        let chip = Num2BitsChip::<F, BOARD_SIZE>::new(num[1].clone(), bits[1]);
+        let chip = Num2BitsChip::<pallas::Base, BOARD_SIZE>::new(num[1].clone(), bits[1]);
         let shot_commitment = chip.synthesize(
             self.config.num2bits[1],
             layouter.namespace(|| "shot_commitment bits2num"),
@@ -418,25 +433,25 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotInstructions<S, F> for ShotChip<S, F> {
 
     fn running_sums(
         &self,
-        layouter: &mut impl Layouter<F>,
-        bits: [[AssignedCell<F, F>; BOARD_SIZE]; 2],
-        trace: [[F; BOARD_SIZE]; 2],
-    ) -> Result<[AssignedCell<F, F>; 2], Error> {
+        layouter: &mut impl Layouter<pallas::Base>,
+        bits: [[AssignedCell<pallas::Base, pallas::Base>; BOARD_SIZE]; 2],
+        trace: [[pallas::Base; BOARD_SIZE]; 2],
+    ) -> Result<[AssignedCell<pallas::Base, pallas::Base>; 2], Error> {
         Ok(layouter.assign_region(
             || "shot running sum",
             |mut region| {
                 // pad first row
                 let mut shot_sum = region.assign_advice_from_constant(
                     || "pad bit sum column",
-                    self.config.advice[2],
+                    self.config.advice[7],
                     0,
-                    F::zero(),
+                    pallas::Base::zero(),
                 )?;
                 let mut hit_sum = region.assign_advice_from_constant(
                     || "pad shot hit sum column",
-                    self.config.advice[3],
+                    self.config.advice[8],
                     0,
-                    F::zero(),
+                    pallas::Base::zero(),
                 )?;
                 // assign rows
                 for i in 0..BOARD_SIZE {
@@ -444,25 +459,25 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotInstructions<S, F> for ShotChip<S, F> {
                     let x1 = bits[0][i].copy_advice(
                         || format!("copy board bit {}", i),
                         &mut region,
-                        self.config.advice[0],
+                        self.config.advice[5],
                         i + 1,
                     )?;
                     let x2 = bits[1][i].copy_advice(
                         || format!("copy shot bit {}", i),
                         &mut region,
-                        self.config.advice[1],
+                        self.config.advice[6],
                         i + 1,
                     )?;
                     // assign trace for row
                     shot_sum = region.assign_advice(
                         || format!("shot bit count sum {}", i),
-                        self.config.advice[2],
+                        self.config.advice[7],
                         i + 1,
                         || Value::known(trace[0][i]),
                     )?;
                     hit_sum = region.assign_advice(
                         || format!("board hit count sum {}", i),
-                        self.config.advice[3],
+                        self.config.advice[8],
                         i + 1,
                         || Value::known(trace[1][i]),
                     )?;
@@ -475,9 +490,9 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotInstructions<S, F> for ShotChip<S, F> {
 
     fn running_sum_output(
         &self,
-        layouter: &mut impl Layouter<F>,
-        hit: AssignedCell<F, F>,
-        output: [AssignedCell<F, F>; 2],
+        layouter: &mut impl Layouter<pallas::Base>,
+        hit: AssignedCell<pallas::Base, pallas::Base>,
+        output: [AssignedCell<pallas::Base, pallas::Base>; 2],
     ) -> Result<(), Error> {
         Ok(layouter.assign_region(
             || "shot running sum output checks",
@@ -486,19 +501,19 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotInstructions<S, F> for ShotChip<S, F> {
                 hit.copy_advice(
                     || "permute hit assertion",
                     &mut region,
-                    self.config.advice[0],
+                    self.config.advice[5],
                     0,
                 )?;
                 output[0].copy_advice(
                     || "permute shot bit count",
                     &mut region,
-                    self.config.advice[1],
+                    self.config.advice[6],
                     0,
                 )?;
                 output[1].copy_advice(
                     || "permute board hits by shot count",
                     &mut region,
-                    self.config.advice[2],
+                    self.config.advice[7],
                     0,
                 )?;
                 self.config.selectors[2].enable(&mut region, 0)?;
@@ -507,16 +522,22 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> ShotInstructions<S, F> for ShotChip<S, F> {
         )?)
     }
 
-    fn hash_board(
+    fn commit_board(
         &self,
-        layouter: &mut impl Layouter<F>,
-        preimage: AssignedCell<F, F>,
-    ) -> Result<AssignedCell<F, F>, Error> {
-        // // input word
-        let chip = Pow5Chip::construct(self.config.poseidon.clone());
-
-        let hasher =
-            Hash::<_, _, S, ConstantLength<1>, 3, 2>::init(chip, layouter.namespace(|| "hasher"))?;
-        hasher.hash(layouter.namespace(|| "hash"), [preimage])
+        layouter: &mut impl Layouter<pallas::Base>,
+        board_state: AssignedCell<pallas::Base, pallas::Base>,
+        board_commitment_trapdoor: pallas::Scalar,
+    ) -> Result<[AssignedCell<pallas::Base, pallas::Base>; 2], Error> {
+        let chip = PedersenCommitmentChip::new(self.config.pedersen.clone());
+        let commitment = chip.synthesize(
+            layouter.namespace(|| "pedersen"),
+            &board_state,
+            Value::known(board_commitment_trapdoor),
+        )?;
+        // return pedersen commitment points
+        Ok([
+            commitment.clone().inner().x(),
+            commitment.clone().inner().y(),
+        ])
     }
 }
