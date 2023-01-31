@@ -366,7 +366,7 @@ impl BoardChip {
         // };
         // export constained board commitment to public instance column
         layouter.constrain_instance(commitment[0].cell(), self.config.instance, 0)?;
-        layouter.constrain_instance(commitment[1].cell(), self.config.instance, 0)?;
+        layouter.constrain_instance(commitment[1].cell(), self.config.instance, 1)?;
 
         Ok(())
     }
