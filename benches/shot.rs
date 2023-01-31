@@ -60,21 +60,19 @@ fn benchmark(c: &mut Criterion) {
     let vk = keygen_vk(&params, &circuit).expect("keygen_vk should not fail");
     let pk = keygen_pk(&params, vk, &circuit).expect("keygen_pk should not fail");
 
-    let mut rng = OsRng;
-
-    // benchmark proof creation
-    c.bench_function("prover", |b| {
-        b.iter(|| {
-            // Create a proof
-            let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
-            create_proof(&params, &pk, &[circuit], &[&[&public_inputs]], &mut rng, &mut transcript)
-                .expect("proof generation should not fail")
-        })
-    });
+    // // benchmark proof creation
+    // c.bench_function("prover", |b| {
+    //     b.iter(|| {
+    //         // Create a proof
+    //         let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
+    //         create_proof(&params, &pk, &[circuit], &[&[&public_inputs]], &mut OsRng, &mut transcript)
+    //             .expect("proof generation should not fail")
+    //     })
+    // });
 
     // create proof for verifier benchmark
     let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
-    create_proof(&params, &pk, &[circuit], &[&[&public_inputs]], &mut rng, &mut transcript)
+    create_proof(&params, &pk, &[circuit], &[&[&public_inputs]], &mut OsRng, &mut transcript)
         .expect("proof generation should not fail");
     let proof = transcript.finalize();
 

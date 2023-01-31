@@ -1,20 +1,15 @@
-
 use {
     crate::{
         chips::{
             bitify::{BitifyConfig, Num2BitsChip},
             pedersen::{PedersenCommitmentChip, PedersenCommitmentConfig},
         },
-        utils::{
-            binary::BinaryValue,
-            board::BOARD_SIZE,
-            pedersen::pedersen_commit
-        },
+        utils::{binary::BinaryValue, board::BOARD_SIZE, pedersen::pedersen_commit},
     },
     halo2_proofs::{
-        arithmetic::{FieldExt, CurveAffine},
+        arithmetic::{CurveAffine, FieldExt},
         circuit::{AssignedCell, Chip, Layouter, Value},
-        pasta::{pallas, group::Curve},
+        pasta::{group::Curve, pallas},
         plonk::{
             Advice, Column, ConstraintSystem, Constraints, Error, Expression, Fixed, Instance,
             Selector, TableColumn,
@@ -227,7 +222,7 @@ impl ShotChip {
         }
         let num2bits: [BitifyConfig; 2] = num2bits.try_into().unwrap();
 
-        // define pedersen chop
+        // define pedersen chip
         let pedersen = PedersenCommitmentChip::configure(meta, advice, fixed, table_idx);
 
         // define gates
@@ -348,11 +343,8 @@ impl ShotChip {
         // constrain results of running sum
         self.running_sum_output(&mut layouter, inputs[4].clone(), running_sum_results)?;
         // commit to board state
-        let commitment = self.commit_board(
-            &mut layouter,
-            inputs[0].clone(),
-            board_commitment_trapdoor,
-        )?;
+        let commitment =
+            self.commit_board(&mut layouter, inputs[0].clone(), board_commitment_trapdoor)?;
         // export public values
         layouter.constrain_instance(commitment[0].cell(), self.config.instance, 0)?;
         layouter.constrain_instance(commitment[1].cell(), self.config.instance, 1)?;

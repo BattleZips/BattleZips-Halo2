@@ -2,29 +2,26 @@ use {
     crate::{
         chips::{
             bitify::{BitifyConfig, Bits2NumChip, Num2BitsChip},
-            placement::{PlacementChip, PlacementConfig, AssignedBits},
+            pedersen::{PedersenCommitmentChip, PedersenCommitmentConfig},
+            placement::{AssignedBits, PlacementChip, PlacementConfig},
             transpose::{TransposeChip, TransposeConfig},
         },
-        utils::{binary::BinaryValue, board::BOARD_SIZE},
-    },
-    halo2_gadgets::poseidon::{
-        primitives::{ConstantLength, Spec},
-        Hash, Pow5Chip, Pow5Config,
+        utils::{binary::BinaryValue, board::BOARD_SIZE, pedersen::pedersen_commit},
     },
     halo2_proofs::{
-        arithmetic::FieldExt,
+        arithmetic::{FieldExt, CurveAffine},
         circuit::{AssignedCell, Chip, Layouter, Region, Value},
+        pasta::{pallas, group::Curve},
         plonk::{
             Advice, Column, ConstraintSystem, Constraints, Error, Expression, Fixed, Instance,
-            Selector,
+            Selector, TableColumn,
         },
         poly::Rotation,
     },
-    std::marker::PhantomData,
 };
 
-pub type Commitments<F> = [AssignedCell<F, F>; 10];
-pub type Placements<F> = [AssignedBits<F>; 10];
+pub type Commitments = [AssignedCell<pallas::Base, pallas::Base>; 10];
+pub type Placements = [AssignedBits<pallas::Base>; 10];
 
 /**
  * Return a label for commitments in debugging
@@ -50,29 +47,32 @@ pub fn commitment_label(i: usize) -> String {
 
 // bundles all placement configs together
 #[derive(Clone, Copy, Debug)]
-pub struct PlacementConfigs<F: FieldExt> {
-    carrier: PlacementConfig<F, 5>,
-    battleship: PlacementConfig<F, 4>,
-    cruiser: PlacementConfig<F, 3>,
-    submarine: PlacementConfig<F, 3>,
-    destroyer: PlacementConfig<F, 2>,
+pub struct PlacementConfigs {
+    carrier: PlacementConfig<pallas::Base, 5>,
+    battleship: PlacementConfig<pallas::Base, 4>,
+    cruiser: PlacementConfig<pallas::Base, 3>,
+    submarine: PlacementConfig<pallas::Base, 3>,
+    destroyer: PlacementConfig<pallas::Base, 2>,
 }
 
 /**
  * Contains all storage needed to verify a battleship board
  */
 #[derive(Clone, Debug)]
-pub struct BoardConfig<F: FieldExt> {
+pub struct BoardConfig {
+    // chip configs
     pub num2bits: [BitifyConfig; 10],
     pub bits2num: BitifyConfig,
-    pub placement: PlacementConfigs<F>,
-    pub transpose: TransposeConfig<F>,
-    pub poseidon: Pow5Config<F, 3, 2>,
+    pub placement: PlacementConfigs,
+    pub transpose: TransposeConfig<pallas::Base>,
+    pub pedersen: PedersenCommitmentConfig,
+    // columns
     pub advice: [Column<Advice>; 11],
-    pub fixed: [Column<Fixed>; 6],
+    pub fixed: [Column<Fixed>; 8],
+    pub table_idx: TableColumn,
     pub instance: Column<Instance>,
+    // selectors
     pub selectors: [Selector; 1],
-    _marker: PhantomData<F>,
 }
 
 /**
@@ -80,13 +80,12 @@ pub struct BoardConfig<F: FieldExt> {
  *    * prove 5 types of ships placed correctly
  *    * prove public commitment is the signed poseidon hash of board integer
  */
-pub struct BoardChip<S: Spec<F, 3, 2>, F: FieldExt> {
-    config: BoardConfig<F>,
-    _marker: PhantomData<S>,
+pub struct BoardChip {
+    config: BoardConfig,
 }
 
-impl<S: Spec<F, 3, 2>, F: FieldExt> Chip<F> for BoardChip<S, F> {
-    type Config = BoardConfig<F>;
+impl Chip<pallas::Base> for BoardChip {
+    type Config = BoardConfig;
     type Loaded = ();
 
     fn config(&self) -> &Self::Config {
@@ -101,7 +100,7 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> Chip<F> for BoardChip<S, F> {
 /**
  * Instructions used by the board chip
  */
-pub trait BoardInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
+pub trait BoardInstructions {
     /**
      * Load the 10 ship placement commitments
      *
@@ -110,9 +109,9 @@ pub trait BoardInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
      */
     fn load_commitments(
         &self,
-        layouter: &mut impl Layouter<F>,
+        layouter: &mut impl Layouter<pallas::Base>,
         ship_commitments: [BinaryValue; 10],
-    ) -> Result<Commitments<F>, Error>;
+    ) -> Result<Commitments, Error>;
 
     /**
      * Load each commitment into a num2bits chip to get constrained 100 bit decompositions
@@ -122,10 +121,10 @@ pub trait BoardInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
      */
     fn decompose_commitments(
         &self,
-        layouter: &mut impl Layouter<F>,
+        layouter: &mut impl Layouter<pallas::Base>,
         ship_commitments: [BinaryValue; 10],
-        commitment: [AssignedCell<F, F>; 10],
-    ) -> Result<Placements<F>, Error>;
+        commitment: [AssignedCell<pallas::Base, pallas::Base>; 10],
+    ) -> Result<Placements, Error>;
 
     /**
      * Load decomposed bits into placement chips
@@ -136,9 +135,9 @@ pub trait BoardInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
      */
     fn synth_placements(
         &self,
-        layouter: &mut impl Layouter<F>,
+        layouter: &mut impl Layouter<pallas::Base>,
         ships: [BinaryValue; 5],
-        placements: Placements<F>,
+        placements: Placements,
     ) -> Result<(), Error>;
 
     /**
@@ -150,10 +149,10 @@ pub trait BoardInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
      */
     fn transpose_placements(
         &self,
-        layouter: &mut impl Layouter<F>,
+        layouter: &mut impl Layouter<pallas::Base>,
         board: BinaryValue,
-        placements: Placements<F>,
-    ) -> Result<AssignedBits<F>, Error>;
+        placements: Placements,
+    ) -> Result<AssignedBits<pallas::Base>, Error>;
 
     /**
      * Recompose the bits from the board transposition instruciton into a single element
@@ -164,36 +163,35 @@ pub trait BoardInstructions<S: Spec<F, 3, 2>, F: FieldExt> {
      */
     fn recompose_board(
         &self,
-        layouter: &mut impl Layouter<F>,
+        layouter: &mut impl Layouter<pallas::Base>,
         board: BinaryValue,
-        transposed: [AssignedCell<F, F>; BOARD_SIZE],
-    ) -> Result<AssignedCell<F, F>, Error>;
+        transposed: [AssignedCell<pallas::Base, pallas::Base>; BOARD_SIZE],
+    ) -> Result<AssignedCell<pallas::Base, pallas::Base>, Error>;
 
     /**
-     * Constrained computation of poseidon hash of transposed board state
+     * Compute the pedersen commitment to the board state
      *
-     * @param preimage - assigned cell storing the transposed board state to hash
-     * @return - if successful, assigned cell storing the poseidon hash of the board state
+     * @param board_state - base field element that can be decomposed into board state
+     * @param board_commitment_trapdoor - scalar field element used to blind the commitment
+     * @return - assigned cell storing the (x, y) coordinates of commitment on pallas curve
      */
-    fn hash_board(
+    fn commit_board(
         &self,
-        layouter: &mut impl Layouter<F>,
-        preimage: AssignedCell<F, F>,
-    ) -> Result<AssignedCell<F, F>, Error>;
+        layouter: &mut impl Layouter<pallas::Base>,
+        board_state: AssignedCell<pallas::Base, pallas::Base>,
+        board_commitment_trapdoor: pallas::Scalar,
+    ) -> Result<[AssignedCell<pallas::Base, pallas::Base>; 2], Error>;
 }
 
-impl<S: Spec<F, 3, 2>, F: FieldExt> BoardChip<S, F> {
-    pub fn new(config: BoardConfig<F>) -> Self {
-        BoardChip {
-            config,
-            _marker: PhantomData,
-        }
+impl BoardChip {
+    pub fn new(config: BoardConfig) -> Self {
+        BoardChip { config }
     }
 
     /**
      * Configure the computation space of the circuit & return BoardConfig
      */
-    pub fn configure(meta: &mut ConstraintSystem<F>) -> BoardConfig<F> {
+    pub fn configure(meta: &mut ConstraintSystem<pallas::Base>) -> BoardConfig {
         // define advice
         let mut advice = Vec::<Column<Advice>>::new();
         for _ in 0..11 {
@@ -205,11 +203,14 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardChip<S, F> {
 
         // define fixed
         let mut fixed = Vec::<Column<Fixed>>::new();
-        for _ in 0..6 {
+        for _ in 0..8 {
             fixed.push(meta.fixed_column());
         }
-        let fixed: [Column<Fixed>; 6] = fixed.try_into().unwrap();
+        let fixed: [Column<Fixed>; 8] = fixed.try_into().unwrap();
         meta.enable_constant(fixed[0]);
+
+        // define table column
+        let table_idx = meta.lookup_table_column();
 
         // define instance column
         let instance = meta.instance_column();
@@ -238,39 +239,41 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardChip<S, F> {
 
         // define placement chips
         let placement = PlacementConfigs {
-            carrier: PlacementChip::<F, 5>::configure(
+            carrier: PlacementChip::<pallas::Base, 5>::configure(
                 meta, advice[0], advice[1], advice[2], fixed[0],
             ),
-            battleship: PlacementChip::<F, 4>::configure(
+            battleship: PlacementChip::<pallas::Base, 4>::configure(
                 meta, advice[0], advice[1], advice[2], fixed[0],
             ),
-            cruiser: PlacementChip::<F, 3>::configure(
+            cruiser: PlacementChip::<pallas::Base, 3>::configure(
                 meta, advice[0], advice[1], advice[2], fixed[0],
             ),
-            submarine: PlacementChip::<F, 3>::configure(
+            submarine: PlacementChip::<pallas::Base, 3>::configure(
                 meta, advice[0], advice[1], advice[2], fixed[0],
             ),
-            destroyer: PlacementChip::<F, 2>::configure(
+            destroyer: PlacementChip::<pallas::Base, 2>::configure(
                 meta, advice[0], advice[1], advice[2], fixed[0],
             ),
         };
 
         // define transpose chip
-        let transpose =
-            TransposeChip::<F>::configure(meta, advice[0..10].try_into().unwrap(), advice[10]);
-
-        // define poseidon chip
-        let poseidon = Pow5Chip::<F, 3, 2>::configure::<S>(
+        let transpose = TransposeChip::<pallas::Base>::configure(
             meta,
-            [advice[0], advice[1], advice[2]],
-            advice[3],
-            [fixed[3], fixed[4], fixed[5]],
-            [fixed[0], fixed[1], fixed[2]], // flipped so fixed[0] is constant
+            advice[0..10].try_into().unwrap(),
+            advice[10],
+        );
+
+        // define pedersen chip
+        let pedersen = PedersenCommitmentChip::configure(
+            meta,
+            advice[0..10].try_into().unwrap(),
+            fixed,
+            table_idx,
         );
 
         // define gates
         meta.create_gate("Commitment orientation H OR V == 0 constraint", |meta| {
-            let mut commitments = Vec::<Expression<F>>::new();
+            let mut commitments = Vec::<Expression<pallas::Base>>::new();
             for i in 0..10 {
                 commitments.push(meta.query_advice(advice[i], Rotation::cur()));
             }
@@ -308,12 +311,12 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardChip<S, F> {
             bits2num,
             placement,
             transpose,
-            poseidon,
+            pedersen,
             advice,
             fixed,
+            table_idx,
             instance,
             selectors,
-            _marker: PhantomData,
         }
     }
 
@@ -322,12 +325,15 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardChip<S, F> {
      *
      * @param ship_commitments - 10x private ship commitments indicating a horizontal or vertical placement
      * @param board - board state as a BinaryValue
+     * @param board_commitment_trapdoor - the trapdoor for the board commitment
+     * @return - Ok if the proof synthesizes successfully
      */
     pub fn synthesize(
         &self,
-        mut layouter: impl Layouter<F>,
+        mut layouter: impl Layouter<pallas::Base>,
         ship_commitments: [BinaryValue; 10],
         board: BinaryValue,
+        board_commitment_trapdoor: pallas::Scalar,
     ) -> Result<(), Error> {
         // compute combined ship commitments
         let mut ships = Vec::<BinaryValue>::new();
@@ -347,33 +353,43 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardChip<S, F> {
             self.transpose_placements(&mut layouter, board, placements.clone())?;
         // recompose the 100 bit board state into a single value
         let transposed = self.recompose_board(&mut layouter, board, transposed_bits)?;
-        // hash the board state into public commitment
-        // @todo: add signing here to prevent known ciphertext attack
-        let commitment = self.hash_board(&mut layouter, transposed.clone())?;
+        // synthesize pedersen commitment to board state
+        let commitment =
+            self.commit_board(&mut layouter, transposed, board_commitment_trapdoor)?;
+        // // compute the pedersen commitment to publicly attest to
+        // let commitment_values = {
+        //     let board_state = pallas::Base::from_u128(board.lower_u128());
+        //     let commitment = pedersen_commit(&board_state, &board_commitment_trapdoor).to_affine();
+        //     let x = commitment.clone().coordinates().unwrap().x().to_owned();
+        //     let y = commitment.clone().coordinates().unwrap().y().to_owned();
+        //     [x, y]
+        // };
         // export constained board commitment to public instance column
-        layouter.constrain_instance(commitment.cell(), self.config.instance, 0)?;
+        layouter.constrain_instance(commitment[0].cell(), self.config.instance, 0)?;
+        layouter.constrain_instance(commitment[1].cell(), self.config.instance, 0)?;
+
         Ok(())
     }
 }
 
-impl<S: Spec<F, 3, 2>, F: FieldExt> BoardInstructions<S, F> for BoardChip<S, F> {
+impl BoardInstructions for BoardChip {
     fn load_commitments(
         &self,
-        layouter: &mut impl Layouter<F>,
+        layouter: &mut impl Layouter<pallas::Base>,
         ship_commitments: [BinaryValue; 10],
-    ) -> Result<Commitments<F>, Error> {
-        let assigned: [AssignedCell<F, F>; 10] = layouter.assign_region(
+    ) -> Result<Commitments, Error> {
+        let assigned: [AssignedCell<pallas::Base, pallas::Base>; 10] = layouter.assign_region(
             || "load ship placements",
-            |mut region: Region<F>| {
+            |mut region: Region<pallas::Base>| {
                 // assign ship commitments
-                let mut cells = Vec::<AssignedCell<F, F>>::new();
+                let mut cells = Vec::<AssignedCell<pallas::Base, pallas::Base>>::new();
                 for i in 0..10 {
                     let label = commitment_label(i);
                     cells.push(region.assign_advice(
                         || format!("{} ship commitment", label),
                         self.config.advice[i],
                         0,
-                        || Value::known(F::from_u128(ship_commitments[i].lower_u128())),
+                        || Value::known(pallas::Base::from_u128(ship_commitments[i].lower_u128())),
                     )?);
                 }
                 _ = self.config.selectors[0].enable(&mut region, 0);
@@ -385,56 +401,58 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardInstructions<S, F> for BoardChip<S, F> 
 
     fn decompose_commitments(
         &self,
-        layouter: &mut impl Layouter<F>,
+        layouter: &mut impl Layouter<pallas::Base>,
         ship_commitments: [BinaryValue; 10],
-        assigned_commitments: [AssignedCell<F, F>; 10],
-    ) -> Result<Placements<F>, Error> {
-        let mut placements = Vec::<AssignedBits<F>>::new();
+        assigned_commitments: [AssignedCell<pallas::Base, pallas::Base>; 10],
+    ) -> Result<Placements, Error> {
+        let mut placements = Vec::<AssignedBits<pallas::Base>>::new();
         for i in 0..10 {
-            let bits = ship_commitments[i].bitfield::<F, BOARD_SIZE>();
-            let num2bits =
-                Num2BitsChip::<F, BOARD_SIZE>::new(assigned_commitments[i].clone(), bits);
+            let bits = ship_commitments[i].bitfield::<pallas::Base, BOARD_SIZE>();
+            let num2bits = Num2BitsChip::<pallas::Base, BOARD_SIZE>::new(
+                assigned_commitments[i].clone(),
+                bits,
+            );
             let label = commitment_label(i);
             let assigned_bits = num2bits.synthesize(
                 self.config.num2bits[i],
                 layouter.namespace(|| format!("{} num2bits", label)),
             )?;
-            placements.push(AssignedBits::<F>::from(assigned_bits));
+            placements.push(AssignedBits::<pallas::Base>::from(assigned_bits));
         }
         Ok(placements.try_into().unwrap())
     }
 
     fn synth_placements(
         &self,
-        layouter: &mut impl Layouter<F>,
+        layouter: &mut impl Layouter<pallas::Base>,
         ships: [BinaryValue; 5],
-        placements: Placements<F>,
+        placements: Placements,
     ) -> Result<(), Error> {
-        PlacementChip::<F, 5>::new(self.config.placement.carrier).synthesize(
+        PlacementChip::<pallas::Base, 5>::new(self.config.placement.carrier).synthesize(
             layouter,
             ships[0],
             placements[0].clone(),
             placements[1].clone(),
         )?;
-        PlacementChip::<F, 4>::new(self.config.placement.battleship).synthesize(
+        PlacementChip::<pallas::Base, 4>::new(self.config.placement.battleship).synthesize(
             layouter,
             ships[1],
             placements[2].clone(),
             placements[3].clone(),
         )?;
-        PlacementChip::<F, 3>::new(self.config.placement.cruiser).synthesize(
+        PlacementChip::<pallas::Base, 3>::new(self.config.placement.cruiser).synthesize(
             layouter,
             ships[2],
             placements[4].clone(),
             placements[5].clone(),
         )?;
-        PlacementChip::<F, 3>::new(self.config.placement.submarine).synthesize(
+        PlacementChip::<pallas::Base, 3>::new(self.config.placement.submarine).synthesize(
             layouter,
             ships[3],
             placements[6].clone(),
             placements[7].clone(),
         )?;
-        PlacementChip::<F, 2>::new(self.config.placement.destroyer).synthesize(
+        PlacementChip::<pallas::Base, 2>::new(self.config.placement.destroyer).synthesize(
             layouter,
             ships[4],
             placements[8].clone(),
@@ -445,39 +463,47 @@ impl<S: Spec<F, 3, 2>, F: FieldExt> BoardInstructions<S, F> for BoardChip<S, F> 
 
     fn transpose_placements(
         &self,
-        layouter: &mut impl Layouter<F>,
+        layouter: &mut impl Layouter<pallas::Base>,
         board: BinaryValue,
-        placements: Placements<F>,
-    ) -> Result<AssignedBits<F>, Error> {
-        let chip = TransposeChip::<F>::new(self.config.transpose);
-        let bits = board.bitfield::<F, BOARD_SIZE>();
+        placements: Placements,
+    ) -> Result<AssignedBits<pallas::Base>, Error> {
+        let chip = TransposeChip::<pallas::Base>::new(self.config.transpose);
+        let bits = board.bitfield::<pallas::Base, BOARD_SIZE>();
         Ok(chip.synthesize(layouter, bits, placements).unwrap())
     }
 
     fn recompose_board(
         &self,
-        layouter: &mut impl Layouter<F>,
+        layouter: &mut impl Layouter<pallas::Base>,
         board: BinaryValue,
-        transposed: [AssignedCell<F, F>; BOARD_SIZE],
-    ) -> Result<AssignedCell<F, F>, Error> {
-        Ok(
-            Bits2NumChip::<F, BOARD_SIZE>::new(F::from_u128(board.lower_u128()), transposed)
-                .synthesize(
-                    self.config.bits2num,
-                    layouter.namespace(|| "transposed bits2num"),
-                )?,
+        transposed: [AssignedCell<pallas::Base, pallas::Base>; BOARD_SIZE],
+    ) -> Result<AssignedCell<pallas::Base, pallas::Base>, Error> {
+        Ok(Bits2NumChip::<pallas::Base, BOARD_SIZE>::new(
+            pallas::Base::from_u128(board.lower_u128()),
+            transposed,
         )
+        .synthesize(
+            self.config.bits2num,
+            layouter.namespace(|| "transposed bits2num"),
+        )?)
     }
 
-    fn hash_board(
+    fn commit_board(
         &self,
-        layouter: &mut impl Layouter<F>,
-        preimage: AssignedCell<F, F>,
-    ) -> Result<AssignedCell<F, F>, Error> {
-        let chip = Pow5Chip::construct(self.config.poseidon.clone());
-
-        let hasher =
-            Hash::<_, _, S, ConstantLength<1>, 3, 2>::init(chip, layouter.namespace(|| "hasher"))?;
-        hasher.hash(layouter.namespace(|| "hash"), [preimage])
+        layouter: &mut impl Layouter<pallas::Base>,
+        board_state: AssignedCell<pallas::Base, pallas::Base>,
+        board_commitment_trapdoor: pallas::Scalar,
+    ) -> Result<[AssignedCell<pallas::Base, pallas::Base>; 2], Error> {
+        let chip = PedersenCommitmentChip::new(self.config.pedersen.clone());
+        let commitment = chip.synthesize(
+            layouter.namespace(|| "pedersen"),
+            &board_state,
+            Value::known(board_commitment_trapdoor),
+        )?;
+        // return pedersen commitment points
+        Ok([
+            commitment.clone().inner().x(),
+            commitment.clone().inner().y(),
+        ])
     }
 }
