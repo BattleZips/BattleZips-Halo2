@@ -133,6 +133,7 @@ mod test {
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove a valid hit assertion for a given board commitment to board pattern 1
         let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
+        // expect success
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -172,6 +173,7 @@ mod test {
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove a valid hit assertion for a given board commitment to board pattern 2
         let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
+        // expect success
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -211,6 +213,7 @@ mod test {
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove a valid miss assertion for a given board commitment to board pattern 1
         let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
+        // expect success
         assert_eq!(prover.verify(), Ok(()));
     }
 
@@ -250,6 +253,7 @@ mod test {
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove a valid miss assertion for a given board commitment on board pattern 2
         let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
+        // expect success
         assert_eq!(prover.verify(), Ok(()));
     }
 
