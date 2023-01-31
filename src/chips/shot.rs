@@ -305,6 +305,7 @@ impl ShotChip {
      * Synthesize a proof of a valid board
      *
      * @param board - the board state in BinaryValue form for bits-> integer functions
+     * @param board_commitment_trapdoor - the trapdoor for the board commitment
      * @param shot - the shot commitment in BinaryValue form for bits-> integer functions
      * @param hit - true/ false assertion if shot produces hit on board
      * @return - Ok if synthesis executes successfully
@@ -345,7 +346,7 @@ impl ShotChip {
         // synthesize running sum
         let running_sum_results = self.running_sums(&mut layouter, assigned_bits, trace)?;
         // constrain results of running sum
-        self.running_sum_output(&mut layouter, inputs[3].clone(), running_sum_results)?;
+        self.running_sum_output(&mut layouter, inputs[4].clone(), running_sum_results)?;
         // commit to board state
         let commitment = self.commit_board(
             &mut layouter,
@@ -354,7 +355,7 @@ impl ShotChip {
         )?;
         // export public values
         layouter.constrain_instance(commitment[0].cell(), self.config.instance, 0)?;
-        layouter.constrain_instance(commitment[1].cell(), self.config.instance, 0)?;
+        layouter.constrain_instance(commitment[1].cell(), self.config.instance, 1)?;
         layouter.constrain_instance(inputs[3].cell(), self.config.instance, 2)?;
         layouter.constrain_instance(inputs[4].cell(), self.config.instance, 3)?;
         Ok(())
