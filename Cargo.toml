@@ -29,7 +29,7 @@ name = "shot"
 path = "benches/shot.rs"
 harness = false
 
-# [[bench]]
-# name = "board"
-# path = "benches/board.rs"
-# harness = false
+[[bench]]
+name = "board"
+path = "benches/board.rs"
+harness = false

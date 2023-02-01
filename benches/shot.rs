@@ -60,30 +60,30 @@ fn benchmark(c: &mut Criterion) {
     let vk = keygen_vk(&params, &circuit).expect("keygen_vk should not fail");
     let pk = keygen_pk(&params, vk, &circuit).expect("keygen_pk should not fail");
 
-    // // benchmark proof creation
-    // c.bench_function("prover", |b| {
-    //     b.iter(|| {
-    //         // Create a proof
-    //         let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
-    //         create_proof(&params, &pk, &[circuit], &[&[&public_inputs]], &mut OsRng, &mut transcript)
-    //             .expect("proof generation should not fail")
-    //     })
-    // });
-
-    // create proof for verifier benchmark
-    let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
-    create_proof(&params, &pk, &[circuit], &[&[&public_inputs]], &mut OsRng, &mut transcript)
-        .expect("proof generation should not fail");
-    let proof = transcript.finalize();
-
-    // benchmark proof verification
-    c.bench_function("verifier", |b| {
+    // benchmark proof creation
+    c.bench_function("shot_prover", |b| {
         b.iter(|| {
-            let strategy = SingleVerifier::new(&params);
-            let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
-            assert!(verify_proof(&params, pk.get_vk(), strategy, &[&[&public_inputs]], &mut transcript).is_ok());
-        });
+            // Create a proof
+            let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
+            create_proof(&params, &pk, &[circuit], &[&[&public_inputs]], &mut OsRng, &mut transcript)
+                .expect("proof generation should not fail")
+        })
     });
+
+    // // create proof for verifier benchmark
+    // let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
+    // create_proof(&params, &pk, &[circuit], &[&[&public_inputs]], &mut OsRng, &mut transcript)
+    //     .expect("proof generation should not fail");
+    // let proof = transcript.finalize();
+
+    // // benchmark proof verification
+    // c.bench_function("shot_verifier", |b| {
+    //     b.iter(|| {
+    //         let strategy = SingleVerifier::new(&params);
+    //         let mut transcript = Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
+    //         assert!(verify_proof(&params, pk.get_vk(), strategy, &[&[&public_inputs]], &mut transcript).is_ok());
+    //     });
+    // });
 }
 
 criterion_group!(benches, benchmark);
