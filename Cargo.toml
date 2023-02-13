@@ -8,21 +8,18 @@ edition = "2021"
 [dependencies]
 halo2_gadgets = { version = "0.2.0", features = ["test-dependencies"] }
 halo2_proofs = "0.2.0"
-plotters = { version = "0.3.4", default-features = false, optional = true }
-proptest = "1.0.0"
 rand_core = "0.6.3"
 bitvec = "1.0.0"
-hex = "0.4.3"
 criterion = "0.4.0"
 rand = "0.8.5"
 
-[features]
-dev-graph = [
-    "halo2_proofs/dev-graph",
-    "plotters",
-    "plotters/bitmap_backend",
-    "plotters/bitmap_encoder",
-]
+# [features]
+# dev-graph = [
+#     "halo2_proofs/dev-graph",
+#     "plotters",
+#     "plotters/bitmap_backend",
+#     "plotters/bitmap_encoder",
+# ]
 
 [[bench]]
 name = "shot"
