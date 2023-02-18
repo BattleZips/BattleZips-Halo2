@@ -1,6 +1,6 @@
 use super::board::BOARD_SIZE;
 
-use {bitvec::prelude::*, halo2_proofs::arithmetic::FieldExt};
+use {bitvec::prelude::*, halo2_proofs::arithmetic::FieldExt, wasm_bindgen::prelude::*};
 
 /**
  * Binary element with converstion functionality
@@ -8,7 +8,7 @@ use {bitvec::prelude::*, halo2_proofs::arithmetic::FieldExt};
  */
 pub type U256 = BitArray<[u64; 4], Lsb0>; // 256 bit integer in little endian
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct BinaryValue {
     pub value: U256,
 }

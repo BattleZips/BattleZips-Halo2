@@ -11,7 +11,7 @@ use {
     },
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct ShotCircuit {
     pub board: BinaryValue,
     pub board_commitment_trapdoor: pallas::Scalar,

@@ -11,7 +11,7 @@ use {
     },
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct BoardCircuit {
     pub ship_commitments: [BinaryValue; 10],
     pub board: BinaryValue,
@@ -87,9 +87,9 @@ mod test {
         halo2_proofs::{
             arithmetic::{CurveAffine, Field},
             dev::{FailureLocation, MockProver, VerifyFailure},
-            poly::commitment::Params,
             pasta::{group::Curve, pallas, vesta},
             plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, Any, SingleVerifier},
+            poly::commitment::Params,
             transcript::{Blake2bRead, Blake2bWrite, Challenge255},
         },
         rand::rngs::OsRng,
