@@ -17,7 +17,7 @@ use {
     },
     rand::rngs::OsRng,
 };
-
+  
 // The number of columns in the constraint system.
 const K: u32 = 12;
 

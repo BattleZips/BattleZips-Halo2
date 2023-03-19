@@ -1,14 +1,21 @@
-use super::board::BOARD_SIZE;
-
-use {bitvec::prelude::*, halo2_proofs::arithmetic::FieldExt, wasm_bindgen::prelude::*};
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+use {
+    super::board::BOARD_SIZE,
+    bitvec::prelude::*,
+    halo2_proofs::{
+        arithmetic::FieldExt,
+        pasta::{group::ff::PrimeField, Fp},
+    },
+};
 
 /**
  * Binary element with converstion functionality
  * @dev stored in 256 bit integer
  */
-pub type U256 = BitArray<[u64; 4], Lsb0>; // 256 bit integer in little endian
+pub type U256 = BitArray<[u8; 32], Lsb0>; // 256 bit integer in little endian
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct BinaryValue {
     pub value: U256,
 }
@@ -19,22 +26,42 @@ impl BinaryValue {
         BinaryValue { value }
     }
 
+    // instantiate from an array of 32 bytes
+    pub fn from_repr(value: [u8; 32]) -> BinaryValue {
+        BinaryValue::new(U256::new(value))
+    }
+
+    // instantiate from an element of Fp
+    pub fn from_fp(value: Fp) -> BinaryValue {
+        BinaryValue::new(U256::new(value.to_repr()))
+    }
+
     // return a 256 bit number from an 8 bit number
     pub fn from_u8(value: u8) -> BinaryValue {
-        BinaryValue {
-            value: U256::new([value as u64, 0, 0, 0]),
-        }
+        let buf = BinaryValue::empty();
+        buf.value.into_inner()[0] = value;
+        buf
     }
 
     // wrap an empty 256 bit BitArray in BinaryValue object
     pub fn empty() -> BinaryValue {
-        BinaryValue::new(BitArray::ZERO)
+        BinaryValue::new(U256::ZERO)
+    }
+
+    // return the underlying buffer of bytes
+    pub fn to_repr(&self) -> [u8; 32] {
+        self.value.into_inner()
+    }
+
+    // return the value as an element of Fp
+    pub fn to_fp(&self) -> Fp {
+        Fp::from_repr(self.to_repr()).unwrap()
     }
 
     // returns the u128 from first half of U256 in LE
     pub fn lower_u128(self) -> u128 {
         u128::from_le_bytes(
-            self.value.into_inner()[0..2]
+            self.value.into_inner()[0..16]
                 .iter()
                 .map(|value| value.to_le_bytes().to_vec())
                 .flatten()

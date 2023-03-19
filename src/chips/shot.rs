@@ -449,13 +449,13 @@ impl ShotInstructions for ShotChip {
                 // assign rows
                 for i in 0..BOARD_SIZE {
                     // permute bits for row
-                    let x1 = bits[0][i].copy_advice(
+                    _ = bits[0][i].copy_advice(
                         || format!("copy board bit {}", i),
                         &mut region,
                         self.config.advice[5],
                         i + 1,
                     )?;
-                    let x2 = bits[1][i].copy_advice(
+                    _ = bits[1][i].copy_advice(
                         || format!("copy shot bit {}", i),
                         &mut region,
                         self.config.advice[6],

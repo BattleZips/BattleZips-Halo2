@@ -79,7 +79,6 @@ impl ShotCircuit {
 
 #[cfg(test)]
 mod test {
-
     use {
         super::*,
         crate::utils::{
@@ -461,7 +460,7 @@ mod test {
             Some((6, 1, false)),
         ]));
         // set the shot commitment to be `0u256`
-        let shot = BinaryValue::new(U256::from([0, 0, 0, 0]));
+        let shot = BinaryValue::empty();
         // assert a miss and wrap in u256
         let hit = BinaryValue::from_u8(0);
         // sample a random trapdoor value for commitment

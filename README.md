@@ -1,5 +1,4 @@
 # BattleZips V2
-As we seek to apply Zero Knowledge cryptography, a generalization of our goal is to build cryptographically-secured "confidential, adversarial multi-party computations". In laymans terms, it means we need a computational vehicle that allows parties to truthfully coordinate with eachother without revealing critical operating parameters that a counterparty could abuse. [Battleships](https://www.hasbro.com/common/instruct/battleship.pdf) is an adversarial, two-player board game centered around a hidden information mechanic. BattleZipsV2 demonstrates how one constrains computations for a Battleship game with the intent that developers can extrapolate their own projects in the [zcash/Halo2](https://github.com/zcash/halo2) proving scheme. 
 
 ## License
 BattleZipsV2 is license under GNU GPLv3. Go nuts.
@@ -42,12 +41,20 @@ We aim to bring a complete walkthrough of the codebase in mid Q1 2023; contact t
  - print circuits and official write up
 
 ## Todo future
- - investigate lookup tables for interpolated placement bit window count exp
- - further refactors for code quality/ hygeine
+ - use wasm exclusively
+ - switch to kzg version
+   - revisit whether kzg has superior recursion that can facilitate state channels
+
  - pedersen commitments instead of poseidon hashes
  - verify board/ shot proofs on-chain
- - wasm integration with BattleZips front-end
+ - front-end integration
+  - basic proving of shot and board circuits
+  - use 
+ - lookup tables used instead of interpolating bit window equation on the fly
  - maybe: video walkthrough
+
+## Motivation
+As we seek to apply Zero Knowledge cryptography, a generalization of our goal is to build cryptographically-secured "confidential, adversarial multi-party computations". In laymans terms, it means we need a computational vehicle that allows parties to truthfully coordinate with eachother without revealing critical operating parameters that a counterparty could abuse. [Battleships](https://www.hasbro.com/common/instruct/battleship.pdf) is an adversarial, two-player board game centered around a hidden information mechanic. BattleZipsV2 demonstrates how one constrains computations for a Battleship game with the intent that developers can extrapolate their own projects in the [zcash/Halo2](https://github.com/zcash/halo2) proving scheme. 
 
 ## On ZK State Channels
 Once Halo2 supports IVC recursion, this codebase will be revisited to prototype ZK State Channels with the battleship game in Halo2. This improvement will add a "Game" proof that recursively takes in Alice Board proof -> Bob Board proof -> Alice shot proof 0 -> Bob shot proof 0 -> ... Alice shot proof N; where the proof will signal a winner if 17 hits have been accumulated. This is a tool of both privacy and scalability:

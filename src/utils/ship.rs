@@ -1,5 +1,8 @@
 use {
-    crate::utils::{binary::BinaryValue, board::BOARD_SIZE},
+    crate::utils::{
+        binary::{BinaryValue},
+        board::BOARD_SIZE
+    },
     bitvec::prelude::*,
 };
 
@@ -165,16 +168,11 @@ impl Ship {
      */
     pub fn bits(self, transpose: bool) -> BinaryValue {
         let coordinates = self.coordinates(transpose);
-        let mut state = bitarr![u64, Lsb0; 0; BOARD_SIZE];
+        let mut bits = BinaryValue::empty();
         for coordinate in coordinates {
-            state.get_mut(coordinate).unwrap().set(true);
+            bits.value.get_mut(coordinate).unwrap().set(true);
         }
-        BinaryValue::new(BitArray::<[u64; 4], Lsb0>::from([
-            state.into_inner()[0],
-            state.into_inner()[1],
-            0,
-            0,
-        ]))
+        bits
     }
 }
 

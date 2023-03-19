@@ -169,7 +169,7 @@ impl<F: FieldExt, const S: usize> PlacementChip<F, S> {
                 if pow == 0 {
                     exp = Expression::Constant(F::one())
                 } else {
-                    for i in 2..=pow {
+                    for _ in 2..=pow {
                         exp = exp.clone() * base.clone();
                     }
                 }

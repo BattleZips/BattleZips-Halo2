@@ -113,8 +113,8 @@ impl Board {
             } else {
                 ships[i].unwrap().witness(utilities[i])
             };
-            full_witness.push(witness[0]);
-            full_witness.push(witness[1]);
+            full_witness.push(witness[0].clone());
+            full_witness.push(witness[1].clone());
         }
         full_witness.try_into().unwrap()
     }
