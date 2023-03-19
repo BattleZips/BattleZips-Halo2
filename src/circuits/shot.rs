@@ -113,7 +113,7 @@ mod test {
         // sample a random trapdoor value for commitment
         let trapdoor = pallas::Scalar::random(&mut OsRng);
         // marshall the board state into a pallas base field element
-        let message = pallas::Base::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128());
+        let message = board.state(DEFAULT_WITNESS_OPTIONS).to_fp();
         // commit to the board state
         let commitment = {
             let commitment = pedersen_commit(&message, &trapdoor).to_affine();
@@ -125,15 +125,16 @@ mod test {
         let public_outputs = vec![
             commitment.0,
             commitment.1,
-            pallas::Base::from_u128(shot.lower_u128()),
-            pallas::Base::from_u128(hit.lower_u128()),
+            shot.to_fp(),
+            hit.to_fp(),
         ];
         // construct Shot circuit
         let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
         // prove a valid hit assertion for a given board commitment to board pattern 1
         let prover = MockProver::run(11, &circuit, vec![public_outputs]).unwrap();
         // expect success
-        assert_eq!(prover.verify(), Ok(()));
+        prover.assert_satisfied();
+        // assert_eq!(prover.verify(), Ok(()));
     }
 
     #[test]

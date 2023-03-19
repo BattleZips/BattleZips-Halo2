@@ -38,9 +38,9 @@ impl BinaryValue {
 
     // return a 256 bit number from an 8 bit number
     pub fn from_u8(value: u8) -> BinaryValue {
-        let buf = BinaryValue::empty();
-        buf.value.into_inner()[0] = value;
-        buf
+        let mut buf = [0u8; 32];
+        buf[0] = value;
+        BinaryValue::from_repr(buf)
     }
 
     // wrap an empty 256 bit BitArray in BinaryValue object

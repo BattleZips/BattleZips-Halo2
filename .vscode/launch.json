@@ -14,7 +14,7 @@
                     "--no-run",
                     "--lib",
                     "--package=battlezips_v2",
-                    "--target wasm32-unknown-unknown"
+                    // "--target wasm32-unknown-unknown"
                 ],
                 "filter": {
                     "name": "battlezips_v2",
@@ -34,7 +34,7 @@
                     "--no-run",
                     "--bench=shot",
                     "--package=battlezips_v2",
-                    "--target wasm32-unknown-unknown"
+                    // "--target wasm32-unknown-unknown"
                 ],
                 "filter": {
                     "name": "shot",
@@ -54,7 +54,7 @@
                     "--no-run",
                     "--bench=board",
                     "--package=battlezips_v2",
-                    "--target wasm32-unknown-unknown"
+                    // "--target wasm32-unknown-unknown"
                 ],
                 "filter": {
                     "name": "board",

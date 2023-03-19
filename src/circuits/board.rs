@@ -108,7 +108,7 @@ mod test {
         // sample a random trapdoor value for commitment
         let trapdoor = pallas::Scalar::random(&mut OsRng);
         // marshall the board state into a pallas base field element
-        let message = pallas::Base::from_u128(board.state(DEFAULT_WITNESS_OPTIONS).lower_u128());
+        let message = board.state(DEFAULT_WITNESS_OPTIONS).to_fp();
         // commit to the board state
         let commitment = {
             let commitment = pedersen_commit(&message, &trapdoor).to_affine();
