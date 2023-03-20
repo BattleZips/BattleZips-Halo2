@@ -242,7 +242,7 @@ mod test {
         halo2_proofs::{
             circuit::SimpleFloorPlanner,
             dev::{metadata, FailureLocation, MockProver, VerifyFailure},
-            pasta::{group::ff::PrimeFieldBits, Fp},
+            halo2curves::pasta::{group::ff::PrimeFieldBits, Fp},
             plonk::{Any, Circuit},
         },
     };

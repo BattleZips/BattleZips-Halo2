@@ -3,7 +3,7 @@ use {
         chip::{constants::H, BaseFieldElem, FixedPoint, FullScalar, ShortScalar },
         FixedPoints,
     },
-    halo2_proofs::pasta::pallas,
+   halo2_proofs::halo2curves::pasta::pallas,
 };
 
 pub mod board_commit_v;

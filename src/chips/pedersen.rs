@@ -12,8 +12,8 @@ use {
     },
     halo2_proofs::{
         circuit::{AssignedCell, Chip, Layouter, Value},
-        pasta::{pallas, EpAffine},
         plonk::{Advice, Column, ConstraintSystem, Error, Fixed, TableColumn},
+        halo2curves::pasta::{pallas, EpAffine}
     },
 };
 

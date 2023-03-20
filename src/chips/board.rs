@@ -11,7 +11,10 @@ use {
     halo2_proofs::{
         arithmetic::{CurveAffine, FieldExt},
         circuit::{AssignedCell, Chip, Layouter, Region, Value},
-        pasta::{group::Curve, pallas},
+        halo2curves::{
+            group::Curve,
+            pasta::pallas
+        },
         plonk::{
             Advice, Column, ConstraintSystem, Constraints, Error, Expression, Fixed, Instance,
             Selector, TableColumn,

@@ -4,8 +4,8 @@ use {
     },
     halo2_proofs::{
         arithmetic::CurveExt,
-        pasta::{group::ff::PrimeField, pallas},
-    },
+        halo2curves::{group::ff::PrimeField, pasta::pallas}
+    }
 };
 
 /**

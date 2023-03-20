@@ -5,7 +5,10 @@ use {
     bitvec::prelude::*,
     halo2_proofs::{
         arithmetic::FieldExt,
-        pasta::{group::ff::PrimeField, Fp},
+        halo2curves::{
+            group::ff::PrimeField,
+            pasta::Fp
+        }
     },
 };
 

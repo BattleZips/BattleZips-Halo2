@@ -9,13 +9,17 @@ use {
     halo2_proofs::{
         arithmetic::{CurveAffine, FieldExt},
         circuit::{AssignedCell, Chip, Layouter, Value},
-        pasta::{group::Curve, pallas},
         plonk::{
             Advice, Column, ConstraintSystem, Constraints, Error, Expression, Fixed, Instance,
             Selector, TableColumn,
         },
         poly::Rotation,
+        halo2curves::{
+            group::Curve,
+            pasta::pallas
+        }
     },
+
 };
 
 /**

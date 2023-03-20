@@ -4,11 +4,15 @@ use {
         utils::binary::BinaryValue,
     },
     halo2_proofs::{
+        halo2curves::{
+            group::Curve,
+            pasta::pallas
+        },
         arithmetic::FieldExt,
         circuit::{Layouter, SimpleFloorPlanner},
-        pasta::{group::Curve, pallas},
         plonk::{Circuit, ConstraintSystem, Error},
     },
+
 };
 
 #[derive(Debug, Clone)]
@@ -87,7 +91,10 @@ mod test {
         halo2_proofs::{
             arithmetic::{CurveAffine, Field},
             dev::{FailureLocation, MockProver, VerifyFailure},
-            pasta::{group::Curve, pallas, vesta},
+            halo2curves::{
+                group::Curve,
+                pasta::{pallas, vesta},
+            },
             plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, Any, SingleVerifier},
             poly::commitment::Params,
             transcript::{Blake2bRead, Blake2bWrite, Challenge255},

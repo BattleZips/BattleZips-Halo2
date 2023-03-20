@@ -6,7 +6,7 @@ use {
     halo2_proofs::{
         arithmetic::FieldExt,
         circuit::{Layouter, SimpleFloorPlanner},
-        pasta::pallas,
+        halo2curves::pasta::pallas,
         plonk::{Circuit, ConstraintSystem, Error},
     },
 };
@@ -88,7 +88,10 @@ mod test {
         halo2_proofs::{
             arithmetic::{CurveAffine, Field},
             dev::{FailureLocation, MockProver, VerifyFailure},
-            pasta::{group::Curve, pallas, vesta},
+            halo2curves::{
+                group::Curve,
+                pasta::{pallas, vesta},
+            },
             plonk::{create_proof, keygen_pk, keygen_vk, verify_proof, Any, SingleVerifier},
             poly::commitment::Params,
             transcript::{Blake2bRead, Blake2bWrite, Challenge255},

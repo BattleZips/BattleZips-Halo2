@@ -1,6 +1,8 @@
 use halo2_gadgets::ecc::chip::constants::{H, NUM_WINDOWS};
-use halo2_proofs::pasta::{arithmetic::CurveAffine, group::ff::PrimeField, pallas};
-
+use halo2_proofs::{
+    arithmetic::CurveAffine,
+    halo2curves::{group::ff::PrimeField, pasta::pallas},
+};
 /// The binding factor for a board commitment. The value is placed over this generator.
 pub const GENERATOR: ([u8; 32], [u8; 32]) = (
     [
