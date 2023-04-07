@@ -11,11 +11,10 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 halo2_gadgets = "0.2.0"
 halo2_proofs = "0.2.0"
-plotters = { version = "0.3.4", optional = true }
-rand_core = { version = "0.6.3", features = ["getrandom"] }
+rand_core = "0.6.3"
 bitvec = "1.0.0"
+criterion = "0.4.0"
 hex = "0.4.3"
-criterion = { version = "0.4.0", default-features = false }
 rand = "0.8.5"
 serde = { version = "1.0.152", features = ["derive"] }
 
@@ -31,7 +30,12 @@ wasm-bindgen-rayon = "1.0"
 halo2_gadgets = { version = "0.2.0", features = ["test-dependencies"] }
 
 # [features]
-# dev-graph = ["halo2_proofs/dev-graph", "plotters", "plotters/bitmap_backend", "plotters/bitmap_encoder"]
+# dev-graph = [
+#     "halo2_proofs/dev-graph",
+#     "plotters",
+#     "plotters/bitmap_backend",
+#     "plotters/bitmap_encoder",
+# ]
 
 [[bench]]
 name = "shot"

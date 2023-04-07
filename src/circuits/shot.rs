@@ -943,23 +943,29 @@ mod test {
     // #[test]
     // fn print_circuit() {
     //     use plotters::prelude::*;
+    //     // construct valid battleship board pattern 1
     //     let board = Board::from(&Deck::from([
-    //         Some((3, 4, false)),
-    //         Some((9, 6, true)),
-    //         Some((0, 0, false)),
-    //         Some((0, 6, false)),
-    //         Some((6, 1, true)),
+    //         Some((3, 3, true)),
+    //         Some((5, 4, false)),
+    //         Some((0, 1, false)),
+    //         Some((0, 5, true)),
+    //         Some((6, 1, false)),
     //     ]));
-    //     let shot = serialize::<1>([1], [6]);
+    //     // serialize a shot at (3, 5) into `53u256`
+    //     let shot = serialize::<1>([3], [5]);
+    //     // assert a hit and wrap in u256
     //     let hit = BinaryValue::from_u8(1);
-    //     let circuit =
-    //         ShotCircuit::<P128Pow5T3, Fp>::new(board.state(DEFAULT_WITNESS_OPTIONS), shot, hit);
+    //     // sample a random trapdoor value for commitment
+    //     let trapdoor = pallas::Scalar::random(&mut OsRng);
+    //     // marshall the board state into a pallas base field element
+    //     // construct Shot circuit
+    //     let circuit = ShotCircuit::new(board.state(DEFAULT_WITNESS_OPTIONS), trapdoor, shot, hit);
     //     let root = BitMapBackend::new("shot_layout.png", (1920, 1080)).into_drawing_area();
     //     root.fill(&WHITE).unwrap();
     //     let root = root
     //         .titled("Shot Circuit Layout", ("sans-serif", 60))
     //         .unwrap();
-    //     CircuitLayout::default()
+    //     halo2_proofs::dev::CircuitLayout::default()
     //         // You can optionally render only a section of the circuit.
     //         .view_width(0..2)
     //         .view_height(0..16)
