@@ -13,7 +13,6 @@ halo2_gadgets = "0.2.0"
 halo2_proofs = "0.2.0"
 rand_core = "0.6.3"
 bitvec = "1.0.0"
-criterion = "0.4.0"
 hex = "0.4.3"
 rand = "0.8.5"
 serde = { version = "1.0.152", features = ["derive"] }
@@ -27,6 +26,7 @@ wasm-bindgen = "0.2.84"
 wasm-bindgen-rayon = "1.0"
 
 [dev-dependencies]
+criterion = "0.4.0"
 halo2_gadgets = { version = "0.2.0", features = ["test-dependencies"] }
 
 # [features]
