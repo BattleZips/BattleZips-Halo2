@@ -6,12 +6,12 @@ use {
             placement::{AssignedBits, PlacementChip, PlacementConfig},
             transpose::{TransposeChip, TransposeConfig},
         },
-        utils::{binary::BinaryValue, board::BOARD_SIZE, pedersen::pedersen_commit},
+        utils::{binary::BinaryValue, board::BOARD_SIZE},
     },
     halo2_proofs::{
-        arithmetic::{FieldExt, CurveAffine},
+        arithmetic::{CurveAffine, FieldExt},
         circuit::{AssignedCell, Chip, Layouter, Region, Value},
-        pasta::{pallas, group::Curve},
+        pasta::{group::Curve, pallas},
         plonk::{
             Advice, Column, ConstraintSystem, Constraints, Error, Expression, Fixed, Instance,
             Selector, TableColumn,
@@ -349,21 +349,12 @@ impl BoardChip {
         // run individual ship placement rule checks
         self.synth_placements(&mut layouter, &ships, &placements)?;
         // check that ships can all be placed together to form a valid board
-        let transposed_bits =
-            self.transpose_placements(&mut layouter, &board, &placements)?;
+        let transposed_bits = self.transpose_placements(&mut layouter, &board, &placements)?;
         // recompose the 100 bit board state into a single value
         let transposed = self.recompose_board(&mut layouter, &board, &transposed_bits)?;
         // synthesize pedersen commitment to board state
         let commitment =
             self.commit_board(&mut layouter, &transposed, &board_commitment_trapdoor)?;
-        // // compute the pedersen commitment to publicly attest to
-        // let commitment_values = {
-        //     let board_state = pallas::Base::from_u128(board.lower_u128());
-        //     let commitment = pedersen_commit(&board_state, &board_commitment_trapdoor).to_affine();
-        //     let x = commitment.clone().coordinates().unwrap().x().to_owned();
-        //     let y = commitment.clone().coordinates().unwrap().y().to_owned();
-        //     [x, y]
-        // };
         // export constained board commitment to public instance column
         layouter.constrain_instance(commitment[0].cell(), self.config.instance, 0)?;
         layouter.constrain_instance(commitment[1].cell(), self.config.instance, 1)?;
