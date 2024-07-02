@@ -1,5 +1,5 @@
 use {
-    battlezips_v2::{
+    battlezips_halo2::{
         chips::shot::ShotConfig,
         circuits::shot::ShotCircuit,
         utils::{
@@ -65,7 +65,7 @@ fn benchmark(c: &mut Criterion) {
         b.iter(|| {
             // Create a proof
             let mut transcript = Blake2bWrite::<_, _, Challenge255<_>>::init(vec![]);
-            create_proof(&params, &pk, &[circuit], &[&[&public_inputs]], &mut OsRng, &mut transcript)
+            create_proof(&params, &pk, &[circuit.clone()], &[&[&public_inputs]], &mut OsRng, &mut transcript)
                 .expect("proof generation should not fail")
         })
     });

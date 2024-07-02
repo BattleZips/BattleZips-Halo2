@@ -1,5 +1,5 @@
 use {
-    battlezips_v2::{
+    battlezips_halo2::{
         chips::board::BoardConfig,
         circuits::board::BoardCircuit,
         utils::{
@@ -61,7 +61,7 @@ fn benchmark(c: &mut Criterion) {
             create_proof(
                 &params,
                 &pk,
-                &[circuit],
+                &[circuit.clone()],
                 &[&[&commitment]],
                 &mut OsRng,
                 &mut transcript,
